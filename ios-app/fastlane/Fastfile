@@ -31,17 +31,25 @@ platform :ios do
 
     squadra = ENV.fetch("ASC_TEAM_ID")
 
+    # build_app non ha un'opzione `api_key`: la chiave si passa a xcodebuild
+    # con i suoi tre parametri nativi, e come file su disco. Lo scrive il
+    # workflow in una cartella temporanea del runner.
+    autenticazione = [
+      "-allowProvisioningUpdates",
+      "-authenticationKeyPath #{ENV.fetch('ASC_KEY_PATH')}",
+      "-authenticationKeyID #{ENV.fetch('ASC_KEY_ID')}",
+      "-authenticationKeyIssuerID #{ENV.fetch('ASC_ISSUER_ID')}"
+    ].join(" ")
+
     build_app(
       project: "CheckoutAutofill.xcodeproj",
       scheme: "CheckoutAutofill",
       configuration: "Release",
       export_method: "app-store",
-      # Senza questa la chiave non arriva a xcodebuild, e
-      # -allowProvisioningUpdates non ha con cosa parlare ad Apple.
-      api_key: chiave,
       # DEVELOPMENT_TEAM serve già all'archiviazione, non solo
       # all'esportazione: altrimenti "Signing requires a development team".
-      xcargs: "-allowProvisioningUpdates CURRENT_PROJECT_VERSION=#{numero} DEVELOPMENT_TEAM=#{squadra}",
+      xcargs: "#{autenticazione} CURRENT_PROJECT_VERSION=#{numero} DEVELOPMENT_TEAM=#{squadra}",
+      export_xcargs: autenticazione,
       export_options: {
         signingStyle: "automatic",
         teamID: squadra
