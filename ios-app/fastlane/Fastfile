@@ -48,8 +48,9 @@ platform :ios do
       export_method: "app-store",
       # DEVELOPMENT_TEAM serve già all'archiviazione, non solo
       # all'esportazione: altrimenti "Signing requires a development team".
+      # Solo per l'archiviazione: all'esportazione la chiave la mette gym da
+      # sé, e ripeterla fa fallire xcodebuild con "may only be provided once".
       xcargs: "#{autenticazione} CURRENT_PROJECT_VERSION=#{numero} DEVELOPMENT_TEAM=#{squadra}",
-      export_xcargs: autenticazione,
       export_options: {
         signingStyle: "automatic",
         teamID: squadra
