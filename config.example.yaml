@@ -1,0 +1,146 @@
+# ---------------------------------------------------------------------------
+# Restock Monitor - configurazione di esempio
+# Copia questo file in config.yaml e adattalo.
+# ---------------------------------------------------------------------------
+
+defaults:
+  # Secondi fra due controlli dello stesso target. Il minimo assoluto e' 3s.
+  # 15-30s e' un buon compromesso: veloce quanto basta, gentile con il sito.
+  interval: 20
+
+  # Variazione casuale applicata all'intervallo (0.3 = +/-30%).
+  # Evita il pattern regolare che fa scattare i rate limiter.
+  jitter: 0.3
+
+  timeout: 15
+
+  # Identificati. Metti un contatto reale: se il sito ha un problema con il tuo
+  # traffico ha modo di dirtelo invece di bannarti e basta.
+  user_agent: "RestockMonitor/1.0 (monitor personale; +mailto:tua@email.it)"
+
+  # Se il robots.txt vieta un URL, quel target viene disattivato.
+  respect_robots: true
+
+  notify: [console, desktop]
+
+state_file: state.json
+
+# ---------------------------------------------------------------------------
+# Canali di notifica
+# ---------------------------------------------------------------------------
+notifiers:
+  console:
+    enabled: true
+
+  desktop:
+    enabled: true
+    sound: true
+
+  telegram:
+    enabled: false
+    # Crea un bot con @BotFather, poi scrivigli e leggi il tuo chat_id da
+    # https://api.telegram.org/bot<TOKEN>/getUpdates
+    bot_token: ""
+    chat_id: ""
+
+  discord:
+    enabled: false
+    # Impostazioni del canale -> Integrazioni -> Webhook -> Copia URL
+    webhook_url: ""
+
+# ---------------------------------------------------------------------------
+# Target
+# ---------------------------------------------------------------------------
+targets:
+
+  # 1. Prodotto singolo su uno store Shopify.
+  #    Incolla l'URL normale del prodotto: il monitor usa da solo l'endpoint .js
+  #    pubblico e legge la disponibilita' di ogni variante (taglia).
+  - name: "Store Esempio - Sneaker X"
+    type: shopify_product
+    url: "https://esempio-store.com/products/sneaker-x"
+    interval: 15
+    # Metti false per tenerlo in elenco senza interrogarlo. Se manca vale true.
+    # Dalla GUI: pulsanti "Attiva / Disattiva" e "Solo questo".
+    enabled: true
+    match:
+      # Solo queste taglie. Togli il blocco per seguirle tutte.
+      variants: ["42", "42.5", "43"]
+    notify: [console, desktop, telegram]
+
+  # 2. Intera collezione Shopify: intercetta anche i prodotti nuovi che
+  #    compaiono senza annuncio, non solo i restock di quelli gia' noti.
+  - name: "Store Esempio - Nuovi arrivi"
+    type: shopify_collection
+    url: "https://esempio-store.com/collections/all"
+    interval: 30
+    match:
+      keyword: "jordan"   # filtro sul titolo del prodotto (opzionale)
+
+  # 3. Endpoint JSON generico (API pubblica di un sito qualsiasi).
+  #    I percorsi sono puntati: "data.items", "stock.status", ...
+  - name: "Negozio con API - Prodotto Y"
+    type: json
+    url: "https://api.esempio.it/v1/products/12345"
+    interval: 25
+    options:
+      items_path: "data.variants"    # lista degli articoli; omesso = radice
+      key_path: "sku"
+      title_path: "size"
+      available_path: "stock.status"
+      available_when: ["in_stock", "available"]   # omesso = valore "truthy"
+      price_path: "price.amount"
+      url_path: "links.web"
+
+  # 4. Pagina HTML senza API: si guarda la presenza di marcatori testuali.
+  #    Apri la pagina da esaurita, cerca la frase che compare solo in quel caso,
+  #    e mettila in out_of_stock_when.
+  - name: "Sito senza API - Prodotto Z"
+    type: html
+    url: "https://esempio.it/prodotto-z"
+    interval: 30
+    options:
+      out_of_stock_when:
+        - "Esaurito"
+        - "Non disponibile"
+        - "Avvisami quando disponibile"
+      in_stock_when:
+        - "Aggiungi al carrello"
+      regex: false
+
+  # 5. Elenco di link: sorveglia un catalogo e avvisa quando compare una voce
+  #    NUOVA. Serve per i siti dove la disponibilita' non e' leggibile ma
+  #    l'elenco dei prodotti si' (pagine di lancio, sitemap).
+  #    Nella GUI trovi gia' pronti alcuni preset di questo tipo.
+  - name: "Sito con solo catalogo - nuovi prodotti"
+    type: links
+    url: "https://esempio.it/sitemap.xml"
+    interval: 900
+    options:
+      # Il gruppo fra parentesi e' la voce da sorvegliare.
+      pattern: '<loc>\s*(https://esempio\.it/[^<\s]+)\s*</loc>'
+      # Anteposto alla voce solo se questa non e' gia' un URL completo.
+      base: ""
+      # Regex facoltativa: il gruppo 1 diventa il titolo mostrato nelle notifiche.
+      # Serve quando la voce contiene anche codici interni che non ha senso leggere,
+      # es. "scarpa-nike-dunk-low-aDZDHfiy/IB3079-200" -> "scarpa nike dunk low".
+      # title_from: "^([A-Za-z0-9\-]+?)(?:-[A-Za-z0-9]{8})?/"
+      # Con cataloghi grandi il filtro e' praticamente obbligatorio.
+      include: ["pokemon"]
+      exclude: ["usato"]
+      limit: 3000
+    # Blocco facoltativo, solo per type=links: apre la scheda di ogni prodotto
+    # per capire se e' davvero acquistabile. Senza, l'elenco sa solo che una
+    # voce e' comparsa; con, distingue disponibile da esaurito e ti avvisa
+    # anche quando un esaurito torna comprabile.
+    # Funziona solo se la scheda prodotto e' raggiungibile e contiene lo stato:
+    # su alcuni siti la disponibilita' arriva via JavaScript e non e' leggibile.
+    detail:
+      in_stock_when: ['\\?"available\\?"\s*:\s*true']
+      # out_of_stock_when: ["Esaurito"]     # ha la precedenza sul disponibile
+      regex: true
+      # Quante schede aprire per giro. Le novita' hanno la precedenza, le altre
+      # ruotano: in pochi giri il catalogo viene coperto tutto senza carichi.
+      max_checks: 5
+      # Ricontrolla anche i prodotti gia' noti ed esauriti, per i restock.
+      recheck_sold_out: true

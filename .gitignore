@@ -1,0 +1,32 @@
+# Segreti: config.yaml contiene il token del bot Telegram.
+# Il modello senza credenziali è config.example.yaml, quello sì versionato.
+config.yaml
+
+# Schermate di lavoro: gui_dialogo.png mostrava il token del bot in chiaro.
+# Nessuna documentazione le usa, quindi restano fuori. Le icone
+# dell'estensione, quelle sì, sono codice e vanno versionate.
+/gui_*.png
+/diagnosi.png
+
+# Stato ed esecuzione del monitor: cambiano a ogni giro, e un registro può
+# contenere URL con dentro le credenziali.
+state.json
+state.lock
+monitor.log
+monitor.err
+*.log
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Xcode: il progetto si rigenera con `xcodegen generate`, non si versiona.
+ios-app/*.xcodeproj/
+ios-app/build.log
+xcuserdata/
+DerivedData/
+
+# Sistema
+.DS_Store
+Thumbs.db

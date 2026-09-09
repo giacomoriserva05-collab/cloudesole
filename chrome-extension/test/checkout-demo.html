@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Checkout finto — banco di prova</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; max-width: 640px; margin: 24px auto; }
+    fieldset { margin-bottom: 18px; }
+    label { display: block; margin: 8px 0; }
+    input, select { width: 100%; padding: 5px; }
+    .row { display: flex; gap: 10px; }
+    .row > label { flex: 1; }
+  </style>
+</head>
+<body>
+  <h1>Checkout finto</h1>
+
+  <label>Cerca nel sito <input type="search" name="q" placeholder="Cerca"></label>
+
+  <fieldset id="shipping-section">
+    <legend>Spedizione</legend>
+    <div class="row">
+      <label>Nome <input type="text" name="shipping_first_name"></label>
+      <label>Cognome <input type="text" name="shipping_last_name"></label>
+    </div>
+    <label>Indirizzo e-mail <input type="email" name="customer_email"></label>
+    <label>Conferma indirizzo e-mail <input type="text" name="customer_email_confirm"></label>
+    <label>Telefono <input type="tel" id="tel1"></label>
+    <label>Via e numero civico <input type="text" name="address_line_1" autocomplete="shipping address-line1"></label>
+    <label>Interno, scala, presso <input type="text" name="address_line_2"></label>
+    <div class="row">
+      <label>CAP <input type="text" name="zip_code" maxlength="5"></label>
+      <label>Città <input type="text" data-testid="city-input"></label>
+      <label>Provincia
+        <select name="state">
+          <option value="">Scegli…</option>
+          <option value="MI">Milano</option>
+          <option value="RM">Roma</option>
+          <option value="TO">Torino</option>
+        </select>
+      </label>
+    </div>
+    <label>Paese
+      <select name="country_code">
+        <option value="">Scegli…</option>
+        <option value="FR">Francia</option>
+        <option value="IT">Italia</option>
+        <option value="DE">Germania</option>
+      </select>
+    </label>
+    <label>Codice fiscale <input type="text" name="cf"></label>
+  </fieldset>
+
+  <fieldset id="billing-section">
+    <legend>Fatturazione</legend>
+    <div class="row">
+      <label>Nome <input type="text" name="billing_first_name"></label>
+      <label>Cognome <input type="text" name="billing_last_name"></label>
+    </div>
+    <label>Indirizzo <input type="text" name="billing_address1"></label>
+    <div class="row">
+      <label>CAP <input type="text" name="billing_postcode"></label>
+      <label>Città <input type="text" name="billing_city"></label>
+    </div>
+  </fieldset>
+
+  <fieldset id="payment-section">
+    <legend>Pagamento</legend>
+    <label>Numero della carta <input type="text" name="cardnumber" autocomplete="cc-number"></label>
+    <label>Titolare della carta <input type="text" name="ccname"></label>
+    <div class="row">
+      <label>Scadenza (MM/AA) <input type="text" name="cc-exp" placeholder="MM/AA" maxlength="5"></label>
+      <label>CVC <input type="text" name="cvc" maxlength="4"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Extra — non devono essere toccati</legend>
+    <label>Codice sconto <input type="text" name="coupon_code"></label>
+    <label>Quantità <input type="text" name="quantity" value="1"></label>
+    <label>Password account <input type="password" name="password"></label>
+    <label>Note per il corriere <input type="text" name="delivery_note"></label>
+  </fieldset>
+
+  <button type="button">Concludi ordine</button>
+
+  <script type="module">
+    import { autofillPage } from '../filler.js';
+    window.autofillPage = autofillPage;
+    window.dumpForm = () => {
+      const out = {};
+      for (const el of document.querySelectorAll('input, select')) {
+        const id = el.name || el.id || el.dataset.testid || el.type;
+        out[id] = el.value;
+      }
+      return out;
+    };
+  </script>
+</body>
+</html>

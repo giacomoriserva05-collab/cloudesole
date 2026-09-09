@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Anteprima del popup</title>
+  <style>body { margin: 0; }</style>
+</head>
+<body>
+  <script>
+    // Captcha finto per la scheda Sito. `window.__captcha` lo pilota dalla
+    // console: `__captcha.versione = 'v3'`, `__captcha.presente = false`,
+    // `__captcha.scadi()`.
+    const finto = window.__captcha = {
+      presente: true,
+      libreria: 'reCAPTCHA',
+      gestita: true,
+      versione: 'v2',            // 'v2' | 'v2i' | 'v3'
+      sitekey: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+      ttl: 120,
+      emesso: 0, scaduto: false, emissioni: 0, scadenze: 0, rinnovi: 0,
+      risolvi() {
+        this.emesso = Date.now(); this.scaduto = false; this.emissioni++;
+      },
+      scadi() {
+        if (!this.emesso) return;
+        this.emesso = 0; this.scaduto = true; this.scadenze++;
+      },
+      probe() {
+        if (!this.presente) return { presente: false, libreria: null, versione: null };
+        const restano = this.emesso
+          ? Math.max(0, this.ttl - Math.round((Date.now() - this.emesso) / 1000)) : 0;
+        if (this.emesso && !restano) this.scadi();
+        const valido = !!this.emesso && !this.scaduto;
+        return {
+          presente: true, libreria: this.libreria, gestita: this.gestita,
+          versione: this.versione, sitekey: this.sitekey,
+          widget: this.versione === 'v3' ? 0 : 1, montato: this.versione !== 'v3',
+          apiPronta: true,
+          token: valido ? '03AFinto1234ab…' : '', tokenLungo: valido ? 248 : 0,
+          valido, scaduto: this.scaduto, restano,
+          emissioni: this.emissioni, scadenze: this.scadenze, rinnovi: this.rinnovi,
+          campo: this.versione === 'v3' ? 'input' : 'textarea'
+        };
+      },
+      rinnova() {
+        if (!this.presente) return { ok: false, motivo: 'nessun captcha in pagina' };
+        if (!this.gestita) return { ok: false, motivo: this.libreria + ' non è gestito qui' };
+        this.rinnovi++;
+        if (this.versione === 'v2') {
+          this.emesso = 0; this.scaduto = false;
+          return { ok: true, modo: 'v2', azione: 'widget azzerato — la spunta va rimessa a mano' };
+        }
+        this.risolvi();
+        return this.versione === 'v3'
+          ? { ok: true, modo: 'v3', azione: 'token nuovo richiesto a Google' }
+          : { ok: true, modo: 'v2i', azione: 'verifica invisibile rilanciata' };
+      }
+    };
+
+    // API di Chrome finte: servono solo a far girare il popup fuori dall'estensione.
+    const mem = { local: {}, session: {} };
+    const area = (bag) => ({
+      get: async (keys) => {
+        const list = Array.isArray(keys) ? keys : [keys];
+        const out = {};
+        for (const k of list) if (k in bag) out[k] = bag[k];
+        return out;
+      },
+      set: async (obj) => Object.assign(bag, obj),
+      remove: async (k) => { delete bag[k]; }
+    });
+    window.chrome = {
+      storage: { local: area(mem.local), session: area(mem.session) },
+      tabs: { query: async () => [{ id: 1, url: 'https://www.esempio-store.it/checkout' }] },
+      scripting: {
+        // Il vero executeScript inietta nella pagina; qui si smista in base a
+        // cosa il popup ha chiesto, così anche la sezione captcha è provabile.
+        executeScript: async (opts) => {
+          if (opts.files) return [{ result: null }];
+          const src = String(opts.func || '');
+          if (/CaptchaCore\.probe/.test(src)) return [{ result: finto.probe() }];
+          if (/CaptchaCore\.rinnova/.test(src)) return [{ result: finto.rinnova() }];
+          return [{ result: { scanned: 0, filled: [] } }];
+        }
+      },
+      // window.__grant decide se la richiesta di permesso viene accettata.
+      permissions: {
+        contains: async () => window.__granted === true,
+        request: async () => { window.__granted = window.__grant !== false; return window.__granted; }
+      },
+      action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
+      // Finge il service worker: risponde a STATUS e SYNC come farebbe lui.
+      runtime: {
+        sendMessage: async (m) => {
+          if (!m || (m.type !== 'STATUS' && m.type !== 'SYNC')) return null;
+          const armed = !!mem.local.armed;
+          const granted = window.__granted === true;
+          return { armed, granted, registered: armed && granted, files: ['cartcore.js', 'autopilot.js'] };
+        }
+      },
+      commands: { onCommand: { addListener: () => {} } }
+    };
+  </script>
+  <script type="module">
+    const html = await (await fetch('../popup.html')).text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = '../popup.css';
+    document.head.appendChild(css);
+    document.body.innerHTML = doc.body.innerHTML.replace(/<script[\s\S]*?<\/script>/g, '');
+    await import('../popup.js');
+  </script>
+</body>
+</html>

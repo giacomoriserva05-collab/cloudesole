@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Checkout a passi senza ricaricare — banco di prova</title>
+  <style>body { font: 14px system-ui, sans-serif; max-width: 620px; margin: 24px auto; }</style>
+</head>
+<body>
+  <h1>Negozio a pagina singola</h1>
+  <p>
+    Qui non si ricarica mai niente: l'indirizzo cambia con <code>pushState</code>,
+    come su parecchi checkout moderni. Serve a verificare che il pilota se ne
+    accorga e che insista finché i campi non compaiono.
+  </p>
+
+  <script>
+    // Le prime due richieste di compilazione non trovano campi: succede sui
+    // checkout che montano il modulo dopo. La terza va a segno.
+    window.__calls = 0;
+    window.__next = null;   // se impostata, forza la risposta
+    window.chrome = {
+      storage: {
+        local: {
+          get: async () => ({
+            armed: true,
+            settings: { autoFillCheckout: true, cartWait: 800, afterAdd: 'checkout' },
+            sites: {},
+            activeId: 'p1',
+            profiles: [{ id: 'p1', name: 'Casa', shipping: { size: '' }, billing: {} }]
+          })
+        }
+      },
+      runtime: {
+        sendMessage: async (msg) => {
+          if (!msg || msg.type !== 'FILL') return null;
+          window.__calls++;
+          if (window.__next) return window.__next;
+          return window.__calls >= 3 ? { filled: 7 } : { filled: 0 };
+        }
+      }
+    };
+  </script>
+  <script src="../cartcore.js"></script>
+  <script src="../autopilot.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+# Nel repository tutto viene salvato con fine-riga Unix. Serve soprattutto al
+# workflow di GitHub Actions: un .yml con fine-riga Windows fa fallire le
+# righe di shell sul runner macOS con errori tipo $'\r': command not found.
+* text=auto eol=lf
+
+# Questi girano su Windows e restano con fine-riga Windows.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binari: non toccarli.
+*.png binary
+*.jpg binary
+*.ico binary

@@ -1,0 +1,74 @@
+name: Compila l'app iOS
+
+# Su Windows non esiste modo di compilare per iOS: lo fa un runner macOS di
+# GitHub, che ha Xcode già installato. Serve a sapere se il codice Swift sta
+# in piedi, e a leggere gli errori quando non ci sta.
+
+on:
+  push:
+    paths:
+      - 'ios-app/**'
+      - 'chrome-extension/cartcore.js'
+      - 'chrome-extension/filler.js'
+      - '.github/workflows/ios-build.yml'
+  pull_request:
+    paths:
+      - 'ios-app/**'
+  workflow_dispatch:        # avviabile a mano da gh o dal sito
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Il motore JavaScript è allineato all'estensione
+        run: |
+          python3 ios-app/tools/sync-js.py
+          if ! git diff --quiet -- ios-app/CheckoutAutofill/Resources; then
+            echo "::error::Le risorse JS non sono allineate con chrome-extension/."
+            echo "Esegui 'python ios-app/tools/sync-js.py' e ricommetti."
+            git diff --stat -- ios-app/CheckoutAutofill/Resources
+            exit 1
+          fi
+          echo "Motore allineato."
+
+      - name: Installa XcodeGen
+        run: brew install xcodegen
+
+      - name: Genera il progetto Xcode
+        working-directory: ios-app
+        run: xcodegen generate
+
+      - name: Compila per il simulatore
+        working-directory: ios-app
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project CheckoutAutofill.xcodeproj \
+            -scheme CheckoutAutofill \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee build.log
+
+      # Il log di xcodebuild è enorme: quando fallisce serve solo questo.
+      - name: Gli errori, senza il contorno
+        if: failure()
+        working-directory: ios-app
+        run: |
+          echo "===== ERRORI ====="
+          grep -E "error:" build.log | sort -u | head -80 || echo "(nessuna riga 'error:' nel log)"
+          echo "===== AVVISI ====="
+          grep -E "warning:" build.log | sort -u | head -30 || true
+
+      - name: Conserva il log completo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: ios-app/build.log
+          if-no-files-found: ignore
+          retention-days: 7

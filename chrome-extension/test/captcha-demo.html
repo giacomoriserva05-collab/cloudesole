@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Checkout con captcha — banco di prova</title>
+  <style>
+    /* Il banco si legge sempre allo stesso modo: i colori degli esiti sono
+       tarati sul chiaro, e un browser in tema scuro li mangerebbe. */
+    :root { color-scheme: light; }
+    body { font: 14px system-ui, sans-serif; max-width: 720px; margin: 24px auto;
+           padding: 0 16px; background: #fff; color: #18181b; }
+    h1 { margin-bottom: 4px; }
+    .sub { color: #666; margin-top: 0; }
+    fieldset { margin-bottom: 18px; border: 1px solid #d4d4d8; border-radius: 6px; }
+    legend { padding: 0 6px; font-weight: 600; }
+    label { display: block; margin: 8px 0; }
+    input, select { width: 100%; padding: 5px; box-sizing: border-box; }
+    .row { display: flex; gap: 10px; }
+    .row > label { flex: 1; }
+    .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 14px; }
+    .bar label { margin: 0; }
+    .bar select, .bar input { width: auto; }
+    button { font: inherit; padding: 6px 12px; border-radius: 5px; border: 1px solid #a1a1aa;
+             background: #fff; cursor: pointer; }
+    button:hover { background: #f4f4f5; }
+    button.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+    button.primary:hover { background: #1d4ed8; }
+    #stato { display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+             padding: 10px 12px; border-radius: 6px; background: #f4f4f5; margin: 10px 0; }
+    .pill { padding: 2px 10px; border-radius: 999px; font-weight: 600; font-size: 13px; }
+    .pill.assente { background: #e4e4e7; color: #3f3f46; }
+    .pill.valido  { background: #dcfce7; color: #166534; }
+    .pill.scaduto { background: #fee2e2; color: #991b1b; }
+    .pill.errore  { background: #fef3c7; color: #92400e; }
+    code, .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #e4e4e7; vertical-align: top; }
+    th { font-size: 12px; text-transform: uppercase; color: #71717a; }
+    .ok   { color: #166534; font-weight: 600; }
+    .ko   { color: #991b1b; font-weight: 600; }
+    .warn { color: #92400e; font-weight: 600; }
+    .nota { background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px;
+            padding: 10px 12px; font-size: 13px; }
+    #widget { min-height: 78px; margin: 10px 0; }
+    .finto { display: inline-flex; align-items: center; gap: 10px; padding: 12px 14px;
+             border: 1px solid #d4d4d8; border-radius: 4px; background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <h1>Checkout con captcha</h1>
+  <p class="sub">
+    Banco di prova per la convivenza fra l'estensione e un captcha, nelle due
+    versioni che si incontrano davvero: <b>v2</b> (la casella "Non sono un robot")
+    e <b>v3</b> (il punteggio invisibile). Verifica che la compilazione non tocchi
+    il captcha, che la scadenza del token venga vista, e che rifarlo funzioni.
+  </p>
+
+  <div class="nota">
+    <b>Il captcha lo risolve una persona, non l'estensione.</b> Con la v2 a
+    casella il pulsante <i>Rifai la verifica</i> riporta il widget allo stato
+    iniziale: la spunta la rimetti tu. Con la v3 e con la v2 invisibile non c'è
+    niente da spuntare, quindi il rinnovo è davvero senza interazione — è il
+    captcha stesso a funzionare così. Nessuna parte di questa pagina prova a
+    superare la verifica al posto tuo.
+  </div>
+
+  <div class="bar">
+    <label>Versione
+      <select id="modo">
+        <option value="v2">v2 — casella da spuntare</option>
+        <option value="v2i">v2 — invisibile</option>
+        <option value="v3">v3 — punteggio</option>
+      </select>
+    </label>
+    <label>Motore
+      <select id="motore">
+        <option value="reale">reale (google.com)</option>
+        <option value="finto">simulato (senza rete)</option>
+      </select>
+    </label>
+    <label>Site key
+      <input id="chiave" size="42" class="mono" placeholder="vuoto = chiave di test">
+    </label>
+    <button id="applica">Applica</button>
+  </div>
+
+  <fieldset>
+    <legend>Verifica</legend>
+    <div id="widget"></div>
+    <div id="stato">
+      <span>Token: <span id="pill" class="pill assente">assente</span></span>
+      <span id="scadenza">—</span>
+      <span class="mono" id="anteprima">—</span>
+    </div>
+    <div class="row" style="gap:8px">
+      <button id="rifai">Rifai la verifica</button>
+      <button id="scadi">Fai scadere adesso</button>
+      <label style="flex:0 0 auto; display:flex; align-items:center; gap:6px; margin:0">
+        <input type="checkbox" id="auto" style="width:auto"> rinnova da solo alla scadenza
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset id="shipping-section">
+    <legend>Spedizione</legend>
+    <div class="row">
+      <label>Nome <input type="text" name="shipping_first_name"></label>
+      <label>Cognome <input type="text" name="shipping_last_name"></label>
+    </div>
+    <label>Indirizzo e-mail <input type="email" name="customer_email"></label>
+    <label>Via e numero civico <input type="text" name="address_line_1" autocomplete="shipping address-line1"></label>
+    <div class="row">
+      <label>CAP <input type="text" name="zip_code" maxlength="5"></label>
+      <label>Città <input type="text" data-testid="city-input"></label>
+      <label>Provincia
+        <select name="state">
+          <option value="">Scegli…</option>
+          <option value="MI">Milano</option>
+          <option value="RM">Roma</option>
+          <option value="TO">Torino</option>
+        </select>
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Campi che devono restare vuoti</legend>
+    <label>Codice captcha (verifica vecchio stile)
+      <input type="text" name="captcha_answer" placeholder="Digita i caratteri"></label>
+    <label>Codice sconto <input type="text" name="coupon_code"></label>
+    <label>Quantità <input type="text" name="quantity" value="1"></label>
+    <label>Password account <input type="password" name="password"></label>
+  </fieldset>
+
+  <button type="button">Concludi ordine</button>
+
+  <fieldset style="margin-top:20px">
+    <legend>Test</legend>
+    <div class="row" style="gap:8px">
+      <button id="esegui" class="primary">Esegui il test</button>
+      <button id="eseguiScadenza">Test del ciclo di scadenza</button>
+    </div>
+    <div id="esito"></div>
+  </fieldset>
+
+  <script>
+  // ---------------------------------------------------------------- stato
+  // Il token di reCAPTCHA vale due minuti, in v2 come in v3. Il motore
+  // simulato usa lo stesso valore, così le due strade si comportano identiche
+  // e i test valgono per tutte e due.
+  var TTL = 120;
+
+  // Chiave di prova pubblicata da Google per la v2 a casella: passa sempre la
+  // verifica e mostra da sola l'avviso "solo per test". Per la v3 e per la v2
+  // invisibile Google non pubblica niente di equivalente: o metti la tua
+  // chiave, o resti sul motore simulato.
+  var CHIAVI_TEST = {
+    v2: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+    v2i: '',
+    v3: ''
+  };
+
+  var q = new URLSearchParams(location.search);
+  var cfg = {
+    modo: q.get('v') === '3' ? 'v3' : (q.get('v') === '2i' ? 'v2i' : 'v2'),
+    motore: q.get('mock') === '1' ? 'finto' : (q.get('mock') === '0' ? 'reale' : null),
+    chiave: q.get('key') || ''
+  };
+
+  var S = {
+    token: null,
+    emesso: 0,
+    scaduto: false,
+    errore: null,
+    widgetId: null,
+    timer: null,
+    tick: null,
+    // Contatori: servono ai test, e a vedere a colpo d'occhio se il rinnovo
+    // automatico sta girando a vuoto.
+    emissioni: 0,
+    scadenze: 0,
+    rinnovi: 0
+  };
+
+  function el(id) { return document.getElementById(id); }
+
+  // Il campo dove reCAPTCHA scrive il token: textarea in v2, input nascosto
+  // in v3. È quello che l'estensione non deve toccare.
+  function campoToken() {
+    return document.querySelector('textarea[name="g-recaptcha-response"]') || el('token-v3');
+  }
+
+  function disegnaStato() {
+    var p = el('pill');
+    var classe = 'assente', testo = 'assente';
+    if (S.errore) { classe = 'errore'; testo = 'errore'; }
+    else if (S.token && !S.scaduto) { classe = 'valido'; testo = 'valido'; }
+    else if (S.scaduto) { classe = 'scaduto'; testo = 'scaduto'; }
+    p.className = 'pill ' + classe;
+    p.textContent = testo;
+
+    if (S.token && !S.scaduto) {
+      el('scadenza').textContent = 'scade fra ' + restano() + ' s';
+    } else if (S.scaduto) {
+      el('scadenza').textContent = 'scaduto — va rifatto';
+    } else {
+      el('scadenza').textContent = S.errore ? String(S.errore) : '—';
+    }
+
+    el('anteprima').textContent = S.token
+      ? S.token.slice(0, 22) + '… (' + S.token.length + ' car.)'
+      : '—';
+  }
+
+  function restano() {
+    if (!S.token || S.scaduto) return 0;
+    return Math.max(0, TTL - Math.round((Date.now() - S.emesso) / 1000));
+  }
+
+  function emetti(token) {
+    S.token = token;
+    S.emesso = Date.now();
+    S.scaduto = false;
+    S.errore = null;
+    S.emissioni++;
+    clearTimeout(S.timer);
+    // La v2 a casella manda lei l'evento di scadenza (expired-callback); per
+    // le altre lo programmiamo qui, perché grecaptcha non avvisa nessuno.
+    if (cfg.motore === 'finto' || cfg.modo !== 'v2') {
+      S.timer = setTimeout(scadi, TTL * 1000);
+    }
+    scriviToken(token);
+    disegnaStato();
+  }
+
+  function scadi() {
+    if (!S.token) return;
+    S.scaduto = true;
+    S.scadenze++;
+    clearTimeout(S.timer);
+    scriviToken('');
+    disegnaStato();
+    if (el('auto').checked) rinnova();
+  }
+
+  // In v2 reale il textarea lo gestisce grecaptcha e non va toccato; negli
+  // altri casi il campo nascosto lo teniamo noi, con lo stesso name.
+  function scriviToken(valore) {
+    if (cfg.modo !== 'v3' && cfg.motore !== 'finto') return;
+    var campo = el('token-v3');
+    if (!campo) {
+      campo = document.createElement('input');
+      campo.type = 'hidden';
+      campo.id = 'token-v3';
+      campo.name = 'g-recaptcha-response';
+      el('widget').appendChild(campo);
+    }
+    campo.value = valore;
+  }
+
+  // ------------------------------------------------------- motore simulato
+  function montaFinto() {
+    var box = el('widget');
+    box.innerHTML = '';
+    var d = document.createElement('div');
+    d.className = 'finto';
+    if (cfg.modo === 'v2') {
+      d.innerHTML = '<input type="checkbox" id="finto-check" style="width:auto">'
+                  + '<span>Non sono un robot <i>(simulato)</i></span>';
+      box.appendChild(d);
+      el('finto-check').addEventListener('change', function (e) {
+        if (e.target.checked) {
+          emetti(tokenFinto());
+        } else {
+          S.token = null; S.scaduto = false; scriviToken(''); disegnaStato();
+        }
+      });
+      scriviToken('');
+    } else {
+      d.innerHTML = '<span>Verifica ' + (cfg.modo === 'v3' ? 'v3' : 'v2 invisibile')
+                  + ' <i>(simulata)</i> — nessuna interazione richiesta</span>';
+      box.appendChild(d);
+      emetti(tokenFinto());
+    }
+  }
+
+  function tokenFinto() {
+    var abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    var s = '03AFinto';
+    for (var i = 0; i < 240; i++) s += abc[Math.floor(Math.random() * abc.length)];
+    return s;
+  }
+
+  function rinnovaFinto() {
+    if (cfg.modo === 'v2') {
+      var c = el('finto-check');
+      if (c) c.checked = false;
+      S.token = null; S.scaduto = false; scriviToken(''); disegnaStato();
+    } else {
+      emetti(tokenFinto());
+    }
+  }
+
+  // ---------------------------------------------------------- motore reale
+  var scriptCaricato = null;
+
+  function caricaScript() {
+    if (scriptCaricato) return scriptCaricato;
+    scriptCaricato = new Promise(function (risolvi, rifiuta) {
+      var s = document.createElement('script');
+      s.src = 'https://www.google.com/recaptcha/api.js?render=explicit';
+      s.async = true; s.defer = true;
+      s.onload = function () {
+        var attendi = function () {
+          if (window.grecaptcha && window.grecaptcha.render) risolvi();
+          else setTimeout(attendi, 50);
+        };
+        attendi();
+      };
+      s.onerror = function () { rifiuta(new Error('script reCAPTCHA non raggiungibile')); };
+      document.head.appendChild(s);
+    });
+    return scriptCaricato;
+  }
+
+  function montaReale() {
+    var chiave = cfg.chiave || CHIAVI_TEST[cfg.modo];
+    if (!chiave) {
+      S.errore = 'serve una site key ' + cfg.modo + ': Google non ne pubblica una di test';
+      el('widget').innerHTML = '<div class="finto">Nessuna chiave per la ' + cfg.modo
+        + '. Incollane una tua qui sopra, oppure passa al motore simulato.</div>';
+      disegnaStato();
+      return;
+    }
+    caricaScript().then(function () {
+      el('widget').innerHTML = '<div id="rc"></div>';
+      try {
+        if (cfg.modo === 'v3') {
+          S.widgetId = grecaptcha.render('rc', { sitekey: chiave, size: 'invisible' });
+          eseguiV3(chiave);
+        } else {
+          S.widgetId = grecaptcha.render('rc', {
+            sitekey: chiave,
+            size: cfg.modo === 'v2i' ? 'invisible' : 'normal',
+            callback: function (t) { emetti(t); },
+            'expired-callback': function () { scadi(); },
+            'error-callback': function () { S.errore = 'errore del widget'; disegnaStato(); }
+          });
+          if (cfg.modo === 'v2i') grecaptcha.execute(S.widgetId);
+        }
+      } catch (e) {
+        S.errore = 'render fallito: ' + e.message;
+        disegnaStato();
+      }
+    }, function (e) {
+      // Senza rete il banco resta usabile: si scende sul simulato.
+      S.errore = e.message + ' — passo al motore simulato';
+      cfg.motore = 'finto';
+      el('motore').value = 'finto';
+      montaFinto();
+    });
+  }
+
+  function eseguiV3(chiave) {
+    grecaptcha.ready(function () {
+      grecaptcha.execute(chiave, { action: 'checkout' })
+        .then(function (t) { emetti(t); })
+        .catch(function (e) { S.errore = 'execute fallito: ' + e.message; disegnaStato(); });
+    });
+  }
+
+  function rinnovaReale() {
+    var chiave = cfg.chiave || CHIAVI_TEST[cfg.modo];
+    if (cfg.modo === 'v3') { eseguiV3(chiave); return; }
+    try {
+      grecaptcha.reset(S.widgetId);
+      S.token = null; S.scaduto = false; disegnaStato();
+      // Invisibile: si rilancia senza che nessuno tocchi niente.
+      // A casella: la spunta la rimette la persona, e non c'è modo di aggirarlo.
+      if (cfg.modo === 'v2i') grecaptcha.execute(S.widgetId);
+    } catch (e) {
+      S.errore = 'reset fallito: ' + e.message;
+      disegnaStato();
+    }
+  }
+
+  // ------------------------------------------------------------- comandi
+  function monta() {
+    clearTimeout(S.timer); clearInterval(S.tick);
+    S.token = null; S.emesso = 0; S.scaduto = false; S.errore = null; S.widgetId = null;
+    var vecchio = el('token-v3');
+    if (vecchio) vecchio.remove();
+    disegnaStato();
+    S.tick = setInterval(disegnaStato, 1000);
+    if (cfg.motore === 'finto') montaFinto(); else montaReale();
+  }
+
+  function rinnova() {
+    S.rinnovi++;
+    if (cfg.motore === 'finto') rinnovaFinto(); else rinnovaReale();
+  }
+
+  el('applica').addEventListener('click', function () {
+    cfg.modo = el('modo').value;
+    cfg.motore = el('motore').value;
+    cfg.chiave = el('chiave').value.trim();
+    monta();
+  });
+  el('rifai').addEventListener('click', rinnova);
+  el('scadi').addEventListener('click', scadi);
+
+  // ---------------------------------------------------------------- test
+  function riga(nome, esito, dettaglio) {
+    return { nome: nome, esito: esito, dettaglio: dettaglio || '' };
+  }
+
+  function stampa(righe) {
+    var corpo = righe.map(function (r) {
+      var c = r.esito === 'ok' ? 'ok' : (r.esito === 'ko' ? 'ko' : 'warn');
+      var t = r.esito === 'ok' ? 'passa' : (r.esito === 'ko' ? 'FALLISCE' : 'da vedere');
+      return '<tr><td>' + r.nome + '</td><td class="' + c + '">' + t
+           + '</td><td class="mono">' + r.dettaglio + '</td></tr>';
+    }).join('');
+    var ko = righe.filter(function (r) { return r.esito === 'ko'; }).length;
+    el('esito').innerHTML =
+      '<p><b>' + (ko ? ko + ' test falliti' : 'tutti i test passano') + '</b> — '
+      + righe.length + ' controlli, ' + cfg.modo + ' / ' + cfg.motore + '</p>'
+      + '<table><tr><th>Controllo</th><th>Esito</th><th>Dettaglio</th></tr>'
+      + corpo + '</table>';
+  }
+
+  function valori() {
+    var out = {};
+    var campi = document.querySelectorAll(
+      '#shipping-section input, #shipping-section select, input[name="captcha_answer"],'
+      + ' input[name="coupon_code"], input[name="quantity"], input[name="password"]');
+    for (var i = 0; i < campi.length; i++) {
+      var n = campi[i];
+      out[n.name || n.dataset.testid] = n.value;
+    }
+    return out;
+  }
+
+  // Stessa forma del profilo salvato dall'estensione: postalCode e province,
+  // non zip e state (quelli sono i name dei campi in pagina, un'altra cosa).
+  var DATI = {
+    shipping: {
+      firstName: 'Giacomo', lastName: 'Rossi', email: 'g.rossi@example.com',
+      address1: 'Via Roma', houseNumber: '12', postalCode: '20121',
+      city: 'Milano', province: 'MI', country: 'IT', size: '42'
+    },
+    billing: { enabled: false },
+    card: {}
+  };
+
+  async function esegui() {
+    var righe = [];
+    var campo = campoToken();
+
+    righe.push(S.token
+      ? riga('token presente prima della compilazione', 'ok', S.token.slice(0, 16) + '…')
+      : riga('token presente prima della compilazione', 'warn',
+             'nessun token: risolvi il captcha, poi rilancia'));
+
+    var tokenPrima = campo ? campo.value : (S.token || '');
+    var prima = valori();
+
+    var esitoFill;
+    try {
+      // autofillPage è sincrona, ma l'await la copre lo stesso: se un domani
+      // diventasse asincrona il banco non se ne accorge.
+      esitoFill = await window.autofillPage({
+        mode: 'fill',
+        options: { fillCard: false, highlight: false },
+        overrides: [],
+        data: DATI
+      });
+    } catch (e) {
+      stampa([riga('autofillPage eseguibile', 'ko', e.message)]);
+      return null;
+    }
+
+    var dopo = valori();
+    var campoDopo = campoToken();
+    var tokenDopo = campoDopo ? campoDopo.value : (S.token || '');
+
+    righe.push(riga('il token non viene sovrascritto',
+      tokenDopo === tokenPrima ? 'ok' : 'ko',
+      tokenDopo === tokenPrima ? 'invariato'
+        : 'prima ' + tokenPrima.length + ' car., dopo ' + tokenDopo.length));
+
+    var scritti = (esitoFill.filled || []).map(function (f) { return f.key; });
+    righe.push(riga('nessun campo del captcha fra quelli compilati',
+      scritti.some(function (k) { return /captcha|token|recaptcha/i.test(k); }) ? 'ko' : 'ok',
+      scritti.length + ' campi: ' + (scritti.join(', ') || 'nessuno')));
+
+    righe.push(riga('il campo "codice captcha" resta vuoto',
+      dopo.captcha_answer === '' ? 'ok' : 'ko', JSON.stringify(dopo.captcha_answer)));
+
+    [['coupon_code', ''], ['quantity', '1'], ['password', '']].forEach(function (t) {
+      righe.push(riga('trappola ' + t[0] + ' intatta',
+        dopo[t[0]] === t[1] ? 'ok' : 'ko', JSON.stringify(dopo[t[0]])));
+    });
+
+    var attesi = ['shipping_first_name', 'shipping_last_name', 'customer_email',
+                  'address_line_1', 'zip_code', 'state'];
+    var pieni = attesi.filter(function (n) { return dopo[n] && dopo[n] !== prima[n]; });
+    righe.push(riga('i campi di spedizione vengono compilati',
+      pieni.length >= 5 ? 'ok' : 'ko',
+      pieni.length + '/' + attesi.length + ': ' + pieni.join(', ')));
+
+    // La compilazione non deve buttare giù il widget né far ripartire il ciclo.
+    righe.push(riga('il widget è ancora in pagina dopo la compilazione',
+      el('widget').children.length > 0 ? 'ok' : 'ko',
+      el('widget').children.length + ' nodi'));
+    righe.push(riga('il token non è stato riemesso dalla compilazione', 'ok',
+      S.emissioni + ' emissioni in totale'));
+
+    stampa(righe);
+    return righe;
+  }
+
+  // Ciclo completo: valido -> scaduto -> rifatto. È il pezzo che risponde a
+  // "quando scade si può rifare".
+  function testScadenza() {
+    var righe = [];
+    if (!S.token) {
+      stampa([riga('token presente', 'warn', 'risolvi prima il captcha')]);
+      return Promise.resolve(null);
+    }
+    righe.push(riga('si parte da un token valido', S.scaduto ? 'ko' : 'ok',
+      'emissioni: ' + S.emissioni));
+
+    var scadenzePrima = S.scadenze;
+    scadi();
+    righe.push(riga('la scadenza viene rilevata',
+      S.scaduto && S.scadenze === scadenzePrima + 1 ? 'ok' : 'ko',
+      'stato: ' + (S.scaduto ? 'scaduto' : 'ancora valido')));
+
+    var campoOra = campoToken();
+    righe.push(riga('il campo del token è vuoto dopo la scadenza',
+      (campoOra ? campoOra.value : '') === '' ? 'ok' : 'warn',
+      'in v2 reale lo svuota grecaptcha, non il banco'));
+
+    var emissioniPrima = S.emissioni;
+    rinnova();
+
+    return new Promise(function (r) { setTimeout(r, 1500); }).then(function () {
+      if (cfg.modo === 'v2' ) {
+        righe.push(riga('il rinnovo riporta il widget da spuntare',
+          !S.token && !S.scaduto ? 'ok' : 'warn',
+          'v2 a casella: la spunta la rimette una persona, ed è giusto così'));
+      } else {
+        righe.push(riga('il rinnovo riemette un token senza interazione',
+          S.emissioni > emissioniPrima && !S.scaduto ? 'ok' : 'ko',
+          'emissioni: ' + emissioniPrima + ' -> ' + S.emissioni));
+      }
+      stampa(righe);
+      return righe;
+    });
+  }
+
+  el('esegui').addEventListener('click', esegui);
+  el('eseguiScadenza').addEventListener('click', testScadenza);
+
+  // Superficie per la console e per un driver esterno (Playwright, Puppeteer).
+  window.__captcha = {
+    stato: function () {
+      return { modo: cfg.modo, motore: cfg.motore, token: S.token, scaduto: S.scaduto,
+               errore: S.errore, emissioni: S.emissioni, scadenze: S.scadenze,
+               rinnovi: S.rinnovi, restano: restano() };
+    },
+    rinnova: rinnova,
+    scadi: scadi,
+    monta: monta,
+    test: esegui,
+    testScadenza: testScadenza,
+    ttl: TTL
+  };
+
+  // Avvio: prima i parametri dell'indirizzo, poi il montaggio.
+  el('modo').value = cfg.modo;
+  el('chiave').value = cfg.chiave;
+  if (!cfg.motore) cfg.motore = (cfg.chiave || CHIAVI_TEST[cfg.modo]) ? 'reale' : 'finto';
+  el('motore').value = cfg.motore;
+  monta();
+  </script>
+
+  <script type="module">
+    import { autofillPage } from '../filler.js';
+    window.autofillPage = autofillPage;
+  </script>
+</body>
+</html>

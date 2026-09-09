@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="dot"></span>
+      <strong>Checkout Autofill</strong>
+    </div>
+    <span id="host" class="host">—</span>
+  </header>
+
+  <div class="profiles">
+    <select id="profile-select" title="Profilo attivo"></select>
+    <button class="btn-small" id="profile-new" title="Nuovo profilo vuoto">Nuovo</button>
+    <button class="btn-small" id="profile-dup" title="Duplica il profilo attivo">Duplica</button>
+    <button class="btn-small danger" id="profile-del" title="Elimina il profilo attivo">Elimina</button>
+  </div>
+
+  <nav class="tabs">
+    <button class="tab is-active" data-tab="profilo">Profilo</button>
+    <button class="tab" data-tab="pagamento">Pagamento</button>
+    <button class="tab" data-tab="sito">Sito</button>
+    <button class="tab" data-tab="opzioni">Opzioni</button>
+  </nav>
+
+  <main>
+    <!-- ------------------------------------------------------- PROFILO -->
+    <section class="panel is-active" data-panel="profilo">
+      <label class="field">
+        <span>Nome del profilo</span>
+        <input id="profile-name" type="text" placeholder="Casa, Ufficio, Regalo…">
+      </label>
+
+      <div id="form-shipping" class="grid"></div>
+
+      <label class="check">
+        <input type="checkbox" id="billing-enabled">
+        <span>Indirizzo di fatturazione diverso</span>
+      </label>
+      <div id="billing-wrap" class="hidden">
+        <p class="hint">Solo i campi compilati qui sostituiscono quelli di spedizione.</p>
+        <div id="form-billing" class="grid"></div>
+      </div>
+    </section>
+
+    <!-- ----------------------------------------------------- PAGAMENTO -->
+    <section class="panel" data-panel="pagamento">
+      <label class="check">
+        <input type="checkbox" id="fill-card">
+        <span>Compila anche i campi della carta</span>
+      </label>
+
+      <div id="card-wrap" class="grid card-grid">
+        <label class="field span2">
+          <span>Numero carta</span>
+          <input id="card-number" type="text" inputmode="numeric" autocomplete="off" placeholder="4111 1111 1111 1111">
+        </label>
+        <label class="field span2">
+          <span>Titolare</span>
+          <input id="card-name" type="text" autocomplete="off" placeholder="Mario Rossi">
+        </label>
+        <label class="field">
+          <span>Mese</span>
+          <input id="card-exp-month" type="text" inputmode="numeric" maxlength="2" placeholder="09">
+        </label>
+        <label class="field">
+          <span>Anno</span>
+          <input id="card-exp-year" type="text" inputmode="numeric" maxlength="4" placeholder="2029">
+        </label>
+        <label class="field">
+          <span>CVC</span>
+          <input id="card-cvc" type="text" inputmode="numeric" maxlength="4" placeholder="123">
+        </label>
+        <div class="field"></div>
+
+        <label class="check span2">
+          <input type="checkbox" id="remember-card">
+          <span>Ricorda la carta su questo computer</span>
+        </label>
+
+        <p class="warn span2" id="card-warning">
+          Senza la spunta, i dati della carta restano in memoria solo fino alla
+          chiusura di Chrome. Con la spunta vengono scritti su disco in chiaro,
+          come qualsiasi dato di estensione: usala solo su un computer tuo.
+        </p>
+
+        <button class="btn-ghost span2" id="clear-card">Cancella i dati della carta</button>
+      </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- SITO -->
+    <section class="panel" data-panel="sito">
+      <p class="hint">
+        Se su questo sito un campo non viene riconosciuto, aggiungi una regola:
+        selettore CSS del campo e a quale dato corrisponde.
+      </p>
+      <div class="row">
+        <input id="ov-selector" type="text" placeholder="#shipping-zip, input[name=&quot;cap&quot;]">
+        <select id="ov-key"></select>
+        <button class="btn-small" id="ov-add">+</button>
+      </div>
+      <ul id="ov-list" class="list"></ul>
+
+      <hr>
+      <p class="hint">Pilota automatico su questo sito, se non ci arriva da solo.</p>
+      <label class="field">
+        <span>Pulsante "aggiungi al carrello" (selettore CSS)</span>
+        <input id="site-add" type="text" placeholder="button.add-to-cart">
+      </label>
+      <label class="field">
+        <span>Indirizzo del carrello</span>
+        <input id="site-cart" type="text" placeholder="/cart">
+      </label>
+      <label class="field">
+        <span>Indirizzo del checkout</span>
+        <input id="site-checkout" type="text" placeholder="/checkout">
+      </label>
+      <button class="btn-ghost" id="probe">Prova il pilota su questa pagina</button>
+      <ul id="probe-list" class="list"></ul>
+
+      <hr>
+      <button class="btn-ghost" id="preview">Analizza la pagina senza compilarla</button>
+      <ul id="preview-list" class="list"></ul>
+
+      <hr>
+      <p class="hint">
+        Captcha in pagina: che versione è, se il token è ancora valido e quanto
+        gli resta. Il captcha lo risolvi tu — qui si vede lo stato e si rifà il
+        giro quando scade.
+      </p>
+      <button class="btn-ghost" id="captcha">Controlla il captcha su questa pagina</button>
+      <ul id="captcha-list" class="list"></ul>
+      <div id="captcha-actions" class="row hidden">
+        <button class="btn-small" id="captcha-renew">Rifai la verifica</button>
+        <label class="check">
+          <input type="checkbox" id="captcha-auto">
+          <span>tieni d'occhio la scadenza</span>
+        </label>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------- OPZIONI -->
+    <section class="panel" data-panel="opzioni">
+      <label class="check">
+        <input type="checkbox" id="opt-overwrite">
+        <span>Sovrascrivi i campi già compilati</span>
+      </label>
+      <label class="check">
+        <input type="checkbox" id="opt-split">
+        <span>Il sito ha un campo separato per il numero civico</span>
+      </label>
+      <label class="check">
+        <input type="checkbox" id="opt-highlight">
+        <span>Evidenzia i campi toccati</span>
+      </label>
+      <label class="check">
+        <input type="checkbox" id="opt-autofill">
+        <span>Da attivo, compila il checkout appena ci arrivi</span>
+      </label>
+      <label class="field">
+        <span>Dopo l'aggiunta al carrello apri</span>
+        <select id="opt-after">
+          <option value="checkout">la pagina di checkout</option>
+          <option value="cart">la pagina del carrello</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Attesa fra il clic e l'apertura della pagina (millisecondi)</span>
+        <input id="opt-wait" type="text" inputmode="numeric" placeholder="1500">
+      </label>
+
+      <hr>
+      <p class="hint" id="engine-state">Controllo dello stato…</p>
+      <button class="btn-ghost" id="resync">Ricontrolla e riattiva il pilota</button>
+
+      <hr>
+      <p class="hint">
+        Per compilare anche i campi dentro agli iframe (molti checkout mettono lì
+        la carta) serve il permesso di lettura su tutti i siti.
+      </p>
+      <button class="btn-ghost" id="grant">Concedi accesso agli iframe</button>
+      <p class="hint" id="grant-state"></p>
+
+      <hr>
+      <p class="hint">
+        Scorciatoia: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Y</kbd> compila senza
+        aprire questa finestra. Si cambia da <code>chrome://extensions/shortcuts</code>.
+      </p>
+      <p class="hint">
+        L'estensione non preme mai il pulsante d'ordine: l'ultimo clic resta tuo.
+      </p>
+    </section>
+  </main>
+
+  <footer>
+    <button id="power" class="btn-power">Attiva l'estensione</button>
+    <div class="footer-row">
+      <button id="fill" class="btn-link">Compila adesso questa pagina</button>
+      <span class="hint" id="power-hint"></span>
+    </div>
+    <p id="status" class="status"></p>
+  </footer>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

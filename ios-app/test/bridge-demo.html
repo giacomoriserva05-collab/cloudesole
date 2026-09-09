@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Ponte iOS — banco di prova</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; max-width: 640px; margin: 24px auto; }
+    label { display: block; margin: 8px 0; }
+    input, select { padding: 6px; }
+    .cta { padding: 10px 20px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <!-- Riproduce quello che la WKWebView caricherebbe: una scheda prodotto in
+       stile Supreme e, sotto, un modulo di checkout. Il ponte è lo stesso file
+       che finisce nell'app; al posto di webkit.messageHandlers i messaggi
+       vengono raccolti in window.__CA_TEST. -->
+  <h1>Prodotto di prova</h1>
+
+  <select name="size" aria-label="size" data-testid="size-dropdown">
+    <option value="4272741">Small</option>
+    <option value="4272742">Medium</option>
+    <option value="4272743">XLarge</option>
+  </select>
+  <div id="ctas">
+    <button type="submit" name="remove" class="cta" id="add">add to cart</button>
+    <button type="button" class="cta">Aggiungi ai preferiti</button>
+  </div>
+
+  <h2>Modulo di checkout</h2>
+  <form id="checkout">
+    <label>Nome <input name="first_name"></label>
+    <label>Cognome <input name="last_name"></label>
+    <label>Email <input type="email" name="email"></label>
+    <label>Indirizzo <input name="address1" autocomplete="shipping address-line1"></label>
+    <label>CAP <input name="zip"></label>
+    <label>Città <input name="city"></label>
+    <label>Provincia
+      <select name="province"><option value="">Scegli…</option><option value="MI">Milano</option></select>
+    </label>
+  </form>
+
+  <script>
+    window.__CA_TEST = [];          // qui finiscono i messaggi verso l'app
+    window.__log = { clicked: null, size: null };
+    document.getElementById('add').addEventListener('click', (e) => {
+      e.preventDefault();
+      window.__log.clicked = 'add to cart';
+    });
+    document.querySelector('select[name="size"]').addEventListener('change', (e) => {
+      window.__log.size = e.target.selectedOptions[0].textContent;
+    });
+
+    const q = new URLSearchParams(location.search);
+    window.__CA_STATE = {
+      armed: q.get('armed') !== '0',
+      settings: {
+        autoFillCheckout: true, cartWait: 9000, afterAdd: 'checkout',
+        overwrite: false, splitHouseNumber: false, highlight: true,
+        fillCard: false
+      },
+      sites: {},
+      profile: {
+        shipping: {
+          firstName: 'Giacomo', lastName: 'Rossi', email: 'g@example.com',
+          phone: '3331234567', address1: 'Via Garibaldi', houseNumber: '12',
+          postalCode: '20121', city: 'Milano', province: 'MI', country: 'IT',
+          size: q.get('size') === null ? 'M' : q.get('size')
+        },
+        billing: { enabled: false }
+      },
+      card: null
+    };
+  </script>
+  <script src="/ios-app/CheckoutAutofill/Resources/cartcore.js"></script>
+  <script src="/ios-app/CheckoutAutofill/Resources/filler.js"></script>
+  <script src="/ios-app/CheckoutAutofill/Resources/bridge.js"></script>
+</body>
+</html>

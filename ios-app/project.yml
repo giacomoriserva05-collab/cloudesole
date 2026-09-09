@@ -1,0 +1,49 @@
+# Descrizione del progetto per XcodeGen.
+#
+#   brew install xcodegen
+#   cd ios-app && xcodegen generate && open CheckoutAutofill.xcodeproj
+#
+# Il file .xcodeproj non sta nel repository apposta: si rigenera da qui, e non
+# ci sono conflitti da risolvere a mano.
+
+name: CheckoutAutofill
+
+options:
+  bundleIdPrefix: it.local
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+targets:
+  CheckoutAutofill:
+    type: application
+    platform: iOS
+    sources:
+      - path: CheckoutAutofill
+        excludes:
+          - "Resources/**"
+      # I tre file JavaScript vanno nel bundle come risorse: sono il motore,
+      # li legge WebController con Bundle.main.url(forResource:).
+      - path: CheckoutAutofill/Resources
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: it.local.checkoutautofill
+        INFOPLIST_FILE: CheckoutAutofill/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.9"
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+
+# Senza uno schema condiviso `xcodebuild -scheme` non trova niente, e la
+# compilazione in cloud fallisce prima ancora di leggere una riga di Swift.
+schemes:
+  CheckoutAutofill:
+    build:
+      targets:
+        CheckoutAutofill: all
+    run:
+      config: Debug
+    archive:
+      config: Release

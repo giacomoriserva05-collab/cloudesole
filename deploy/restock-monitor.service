@@ -1,0 +1,45 @@
+# Unita' systemd per far girare il monitor su una macchina sempre accesa
+# (Raspberry Pi, NAS, piccolo server). E' l'unico modo perche' continui a
+# funzionare quando il PC di casa e' spento.
+#
+# Installazione, come utente normale (non root):
+#
+#   1. copia la cartella del progetto sulla macchina, per esempio in
+#      /home/<utente>/restock
+#   2. python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+#   3. .venv/bin/python -m restock -c config.yaml --once     (verifica)
+#   4. mkdir -p ~/.config/systemd/user
+#      cp deploy/restock-monitor.service ~/.config/systemd/user/
+#      # correggi WorkingDirectory ed ExecStart con il percorso vero
+#   5. systemctl --user daemon-reload
+#      systemctl --user enable --now restock-monitor
+#      loginctl enable-linger $USER      # fa girare il servizio anche senza login
+#
+# Registro:   journalctl --user -u restock-monitor -f
+# Stato:      systemctl --user status restock-monitor
+# Fermo:      systemctl --user stop restock-monitor
+#
+# Sulla macchina remota lascia attivo solo Telegram fra i canali: le notifiche
+# desktop non avrebbero nessuno schermo davanti.
+
+[Unit]
+Description=Restock Monitor - disponibilita' su store online
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/restock
+ExecStart=%h/restock/.venv/bin/python -m restock -c config.yaml
+
+# Se si interrompe riparte da solo, con una pausa per non ripartire a raffica
+# quando il problema e' la rete che non c'e' ancora.
+Restart=always
+RestartSec=30
+
+# Il monitor scrive lo stato nella propria cartella: nient'altro gli serve.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

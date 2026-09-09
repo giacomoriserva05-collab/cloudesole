@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Scheda prodotto finta — banco di prova</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; max-width: 620px; margin: 24px auto; }
+    .sizes { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .sizes button { padding: 10px 16px; border: 1px solid #bbb; background: #fff; cursor: pointer; }
+    .sizes button.sold-out { opacity: .35; text-decoration: line-through; }
+    .sizes button.chosen { border-color: #16a34a; border-width: 2px; }
+    .cta { padding: 12px 22px; font-size: 15px; border: 0; background: #111; color: #fff; cursor: pointer; }
+    .secondary { padding: 12px 22px; margin-left: 8px; }
+  </style>
+</head>
+<body>
+  <header><a href="/test/cart/">Carrello (0)</a></header>
+
+  <h1>Scarpa da corsa — modello di prova</h1>
+  <p>€ 149,00</p>
+
+  <h3>Taglia</h3>
+  <div class="sizes" id="sizes">
+    <button type="button">40</button>
+    <button type="button">41</button>
+    <button type="button" class="sold-out" disabled>42</button>
+    <button type="button">42.5</button>
+    <button type="button">43</button>
+  </div>
+
+  <div id="ctas">
+    <button type="button" class="cta" id="add">Aggiungi al carrello</button>
+    <button type="button" class="secondary">Aggiungi ai preferiti</button>
+    <button type="button" class="secondary">Acquista ora</button>
+  </div>
+
+  <script>
+    // Registra cosa fa il pilota automatico, senza che nulla parta davvero.
+    window.__log = { clicked: null, size: null };
+    document.querySelectorAll('#sizes button').forEach((b) => {
+      b.addEventListener('click', () => {
+        document.querySelectorAll('#sizes button').forEach((x) => x.classList.remove('chosen'));
+        b.classList.add('chosen');
+        window.__log.size = b.textContent.trim();
+      });
+    });
+    document.querySelectorAll('#ctas button').forEach((b) => {
+      b.addEventListener('click', () => { window.__log.clicked = b.textContent.trim(); });
+    });
+
+    // Con ?many la pagina finge di essere un elenco: due pulsanti uguali.
+    if (location.search.includes('many')) {
+      const extra = document.createElement('button');
+      extra.type = 'button';
+      extra.className = 'cta';
+      extra.textContent = 'Aggiungi al carrello';
+      extra.addEventListener('click', () => { window.__log.clicked = 'secondo prodotto'; });
+      document.getElementById('ctas').appendChild(extra);
+    }
+
+    // Con ?nosizes il prodotto non ha taglie.
+    if (location.search.includes('nosizes')) document.getElementById('sizes').remove();
+
+    // API di Chrome finte: l'estensione risulta attiva, taglia 42.5.
+    const FAKE = {
+      armed: true,
+      settings: { autoFillCheckout: true, cartWait: 6000 },
+      sites: {},
+      activeId: 'p1',
+      profiles: [{ id: 'p1', name: 'Casa', shipping: { size: (new URLSearchParams(location.search).get('size') || '') }, billing: {} }]
+    };
+    window.chrome = {
+      storage: { local: { get: async () => FAKE } },
+      runtime: { sendMessage: async () => ({ filled: 0 }) }
+    };
+  </script>
+  <script src="../cartcore.js"></script>
+  <script src="../autopilot.js"></script>
+</body>
+</html>

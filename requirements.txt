@@ -1,0 +1,3 @@
+httpx>=0.27
+PyYAML>=6.0
+winotify>=1.1; sys_platform == "win32"
