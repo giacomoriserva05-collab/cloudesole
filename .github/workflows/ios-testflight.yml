@@ -1,0 +1,72 @@
+name: Carica su TestFlight
+
+# Si avvia solo a mano: firmare e caricare costa minuti macOS, e non ha senso
+# farlo a ogni commit. Da riga di comando:
+#   gh workflow run "Carica su TestFlight"
+
+on:
+  workflow_dispatch:
+    inputs:
+      note:
+        description: "Nota per i tester (facoltativa)"
+        required: false
+        default: "Build automatica da GitHub Actions."
+
+jobs:
+  testflight:
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Meglio fermarsi subito con un messaggio chiaro che a metà del
+      # caricamento con un errore di fastlane incomprensibile.
+      - name: Ci sono tutti i segreti?
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_TEAM_ID: ${{ secrets.ASC_TEAM_ID }}
+        run: |
+          mancanti=""
+          for v in ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8 ASC_TEAM_ID; do
+            if [ -z "${!v}" ]; then mancanti="$mancanti $v"; fi
+          done
+          if [ -n "$mancanti" ]; then
+            echo "::error::Segreti mancanti:$mancanti"
+            echo "Impostali con: gh secret set NOME --repo <utente>/cloudesole"
+            exit 1
+          fi
+          echo "Segreti presenti."
+
+      - name: Installa XcodeGen
+        run: brew install xcodegen
+
+      - name: Genera il progetto Xcode
+        working-directory: ios-app
+        run: xcodegen generate
+
+      - name: Compila, firma e carica
+        working-directory: ios-app
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_TEAM_ID: ${{ secrets.ASC_TEAM_ID }}
+          # Progressivo sempre crescente, così TestFlight non rifiuta la build.
+          BUILD_NUMBER: ${{ github.run_number }}
+          CHANGELOG: ${{ inputs.note }}
+          FASTLANE_SKIP_UPDATE_CHECK: "1"
+        run: fastlane beta
+
+      - name: Conserva il pacchetto e i registri
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipa-e-registri
+          path: |
+            ios-app/build/*.ipa
+            ~/Library/Logs/gym/*.log
+          if-no-files-found: ignore
+          retention-days: 7

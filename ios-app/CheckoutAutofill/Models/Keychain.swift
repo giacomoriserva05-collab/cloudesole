@@ -5,7 +5,7 @@ import Security
 /// ricordarli. Nell'estensione Chrome finivano in chiaro su disco; su iOS
 /// c'è di meglio, e costa poche righe.
 enum Keychain {
-    private static let service = "it.local.checkoutautofill.cards"
+    private static let service = "com.giacomoriserva.checkoutautofill.cards"
 
     static func save(_ data: Data, account: String) {
         delete(account: account)

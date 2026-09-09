@@ -240,45 +240,65 @@ CSS su misura e l'indirizzo esatto del carrello.
 
 ### Il captcha di questa pagina
 
-In fondo alla scheda **Sito**, *Controlla il captcha su questa pagina* dice che
-captcha c'è e a che punto è. Serve perché il token di reCAPTCHA **vale due
-minuti**: se il drop ti fa aspettare, quando arrivi a mandare l'ordine la
-verifica che avevi fatto è già morta, e il negozio te la ributta in faccia a
-carrello pieno. Qui lo vedi prima.
+In fondo alla scheda **Sito** c'è il riquadro **Captcha**: dice che captcha
+c'è e a che punto è. Serve perché il token **scade** — due minuti su reCAPTCHA
+e hCaptcha, cinque su Turnstile: se il drop ti fa aspettare, quando arrivi a
+mandare l'ordine la verifica che avevi fatto è già morta, e il negozio te la
+ributta in faccia a carrello pieno. Qui lo vedi prima.
 
-| Riga | Cosa dice |
-| --- | --- |
-| Libreria | reCAPTCHA, oppure hCaptcha e Turnstile — che vengono riconosciuti e segnalati, ma non gestiti |
-| Versione | v2 a casella, v2 invisibile, v3 a punteggio |
-| Site key | la chiave del sito, utile quando il widget non compare |
-| Widget | quanti ce ne sono e se sono già disegnati |
-| Token | valido, scaduto, o non ancora risolto |
-| Scade fra | i secondi che restano, in rosso sotto i venti |
-| Giro | quanti token emessi, scaduti e rifatti da quando guardi |
+Riconosce **tutti i captcha che si incontrano davvero**, e su tre li sa anche
+rifare:
 
-*Rifai la verifica* fa la cosa giusta per ogni versione:
+| Captcha | Versioni | Rifacibile da qui |
+| --- | --- | --- |
+| **reCAPTCHA** | v2 a casella, v2 invisibile, v3 a punteggio, Enterprise | sì |
+| **hCaptcha** | casella, invisibile | sì |
+| **Cloudflare Turnstile** | gestito, solo se serve, su richiesta | sì |
+| Arkose Labs / FunCaptcha | — | no, API chiusa |
+| GeeTest, AWS WAF, Friendly Captcha, MTCaptcha | — | no, API chiusa |
+| Captcha a immagine fatto in casa | — | no, non c'è nessuna API |
 
-- **v2 a casella** — azzera il widget con `grecaptcha.reset()`. La spunta la
-  rimetti tu: è l'unico punto in cui serve una persona, e l'estensione non
+Quelli dell'ultima parte vengono comunque **riconosciuti e segnalati**: sapere
+che c'è un Arkose in pagina spiega perché il checkout non va avanti, anche se
+da qui non si può fare niente.
+
+Per ogni captcha trovato il riquadro mostra versione, site key, quanti widget
+ci sono e se sono già disegnati, lo stato del token (valido, scaduto, non
+ancora risolto), i secondi che restano — in rosso sotto i venti — e il conto
+di quanti token sono stati emessi, scaduti e rifatti. Se in pagina ce n'è più
+di uno, ognuno ha il suo blocco e compare una tendina per scegliere quale
+rifare.
+
+*Rifai la verifica* fa la cosa giusta per ciascuno:
+
+- **reCAPTCHA v2 a casella** e **hCaptcha a casella** — `reset()`, e la spunta
+  la rimetti tu. È l'unico punto in cui serve una persona, e l'estensione non
   prova ad aggirarlo.
-- **v2 invisibile** — `reset()` più `execute()`: non c'è niente da spuntare,
-  quindi il token nuovo arriva da sé.
-- **v3** — `execute()` e il token nuovo finisce nello stesso campo dove lo
-  mette il sito. Nessuna sfida da superare: la v3 non ne mostra mai, il
-  punteggio lo dà Google.
+- **le versioni invisibili** — `reset()` più `execute()`: non c'è niente da
+  spuntare, quindi il token nuovo arriva da sé.
+- **reCAPTCHA v3** — `execute()` e il token nuovo finisce nello stesso campo
+  dove lo mette il sito. La v3 non mostra mai una sfida: il punteggio lo dà
+  Google.
+- **Turnstile** — `reset()`, e in modalità gestita riparte da solo.
 
 *Tieni d'occhio la scadenza* ricontrolla ogni secondo finché il popup resta
 aperto, così il conto alla rovescia si muove davvero.
 
 Il riconoscimento sta in `captcha.js`, che gira **nel mondo MAIN** della
-pagina: `grecaptcha` vive lì, e dal mondo isolato degli script di estensione
-non si vedrebbe. Trova il widget anche quando il sito lo monta con
-`grecaptcha.render()` senza classe né `data-sitekey`, leggendo chiave e
-dimensione dalla query dell'iframe.
+pagina: `grecaptcha`, `hcaptcha` e `turnstile` vivono lì, e dal mondo isolato
+degli script di estensione non si vedrebbero. Ogni fornitore dichiara come
+riconoscersi, dove tiene il token, quanto vale e come si rifà — aggiungerne
+uno è una voce in più nell'elenco `FORNITORI`.
 
-> Il token lo emette Google e lo valuta Google. L'estensione non risolve
-> captcha e non ci prova: quello che automatizza è accorgersi che il token è
-> scaduto e rifare il giro.
+Trova il widget in tutti e due i modi in cui i siti lo montano: quello
+implicito, con `data-sitekey` sul contenitore, e quello esplicito via
+`render()` su un div qualunque, dove la chiave va pescata dall'indirizzo
+dell'iframe. Con hCaptcha esplicito la chiave non è scritta da nessuna parte:
+lì la riga *Site key* resta vuota, e va bene così.
+
+> Il token lo emette il fornitore e lo valuta il fornitore. L'estensione non
+> risolve captcha e non ci prova: quello che automatizza è accorgersi che il
+> token è scaduto e rifare il giro.
 
 ## Quando un campo non viene riconosciuto
 
@@ -337,7 +357,7 @@ agli iframe.
 manifest.json      permessi e punti d'ingresso (Manifest V3)
 filler.js          il motore dei campi: riconoscimento e scrittura
 cartcore.js        riconoscimento di pulsante, taglie e carrello (condiviso)
-captcha.js         stato del captcha e rinnovo del token (gira nel mondo MAIN)
+captcha.js         riconoscimento dei captcha e rinnovo del token (mondo MAIN)
 autopilot.js       la sequenza: taglia, aggiunta al carrello, apertura carrello
 runner.js          profili salvati, carte e avvio dell'iniezione (condiviso)
 background.js      service worker: interruttore, scorciatoia, badge
@@ -418,6 +438,19 @@ console e da un driver esterno c'è `window.__captcha`: `stato()`, `scadi()`,
 > Il banco non risolve il captcha e non prova a farlo: la verifica resta un
 > gesto di chi sta davanti allo schermo. Quello che automatizza è il contorno —
 > accorgersi che il token è scaduto e rifare il giro.
+
+`test/captcha-tutti.html` monta **le tre librerie insieme** nella stessa
+pagina, con le chiavi di test ufficiali di ciascuna: reCAPTCHA v2 in modo
+esplicito (`grecaptcha.render`), hCaptcha e Turnstile in modo implicito
+(`data-sitekey` sul contenitore). Copre perciò tutti e due i modi in cui i
+siti li montano. Il pulsante *Leggi con captcha.js* carica lo stesso file che
+l'estensione inietta e mostra cosa ha riconosciuto: fornitore, versione, site
+key e stato del token. È il posto dove provare il riquadro **Captcha** della
+scheda Sito senza andare a cercarsi un negozio che ne monti uno.
+
+Le chiavi di test dei tre fornitori passano sempre e non proteggono niente:
+`6LeIxAcT...` per reCAPTCHA v2, `10000000-ffff-ffff-ffff-000000000001` per
+hCaptcha, `1x00000000000000000000AA` per Turnstile.
 
 ```bash
 python -m http.server 8777

@@ -127,19 +127,28 @@
       <ul id="preview-list" class="list"></ul>
 
       <hr>
-      <p class="hint">
-        Captcha in pagina: che versione è, se il token è ancora valido e quanto
-        gli resta. Il captcha lo risolvi tu — qui si vede lo stato e si rifà il
-        giro quando scade.
-      </p>
-      <button class="btn-ghost" id="captcha">Controlla il captcha su questa pagina</button>
-      <ul id="captcha-list" class="list"></ul>
-      <div id="captcha-actions" class="row hidden">
-        <button class="btn-small" id="captcha-renew">Rifai la verifica</button>
-        <label class="check">
-          <input type="checkbox" id="captcha-auto">
-          <span>tieni d'occhio la scadenza</span>
-        </label>
+      <div class="riquadro">
+        <h3 class="riquadro-titolo">Captcha</h3>
+        <p class="hint">
+          Che captcha c'è, se il token è ancora valido e quanto gli resta.
+          reCAPTCHA (v2, invisibile, v3, Enterprise), hCaptcha e Turnstile si
+          rifanno da qui; gli altri vengono riconosciuti e segnalati.
+        </p>
+        <button class="btn-ghost" id="captcha">Controlla il captcha su questa pagina</button>
+        <ul id="captcha-list" class="list"></ul>
+        <div id="captcha-actions" class="hidden">
+          <label class="field hidden" id="captcha-pick-wrap">
+            <span>Quale rifare</span>
+            <select id="captcha-pick"></select>
+          </label>
+          <div class="row">
+            <button class="btn-small" id="captcha-renew">Rifai la verifica</button>
+            <label class="check">
+              <input type="checkbox" id="captcha-auto">
+              <span>tieni d'occhio la scadenza</span>
+            </label>
+          </div>
+        </div>
       </div>
     </section>
 

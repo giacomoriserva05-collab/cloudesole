@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Tutti i captcha — banco di prova</title>
+  <style>
+    :root { color-scheme: light; }
+    body { font: 14px system-ui, sans-serif; max-width: 760px; margin: 24px auto;
+           padding: 0 16px; background: #fff; color: #18181b; }
+    h1 { margin-bottom: 4px; }
+    .sub { color: #666; margin-top: 0; }
+    fieldset { margin-bottom: 18px; border: 1px solid #d4d4d8; border-radius: 6px; }
+    legend { padding: 0 6px; font-weight: 600; }
+    .nota { background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px;
+            padding: 10px 12px; font-size: 13px; margin-bottom: 14px; }
+    .mono, code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+    .stato { display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+             padding: 8px 10px; border-radius: 6px; background: #f4f4f5; margin-top: 10px; }
+    .pill { padding: 2px 10px; border-radius: 999px; font-weight: 600; font-size: 12px; }
+    .assente { background: #e4e4e7; color: #3f3f46; }
+    .valido  { background: #dcfce7; color: #166534; }
+    .scaduto { background: #fee2e2; color: #991b1b; }
+    button { font: inherit; padding: 5px 11px; border-radius: 5px; border: 1px solid #a1a1aa;
+             background: #fff; cursor: pointer; }
+    button:hover { background: #f4f4f5; }
+    .bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+    th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #e4e4e7; }
+    th { font-size: 12px; text-transform: uppercase; color: #71717a; }
+    .ok { color: #166534; font-weight: 600; }
+    .ko { color: #991b1b; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Tutti i captcha</h1>
+  <p class="sub">
+    Le tre librerie gestite dall'estensione, montate insieme nella stessa
+    pagina con le <b>chiavi di test ufficiali</b> di ciascuna. Serve a provare
+    il riquadro <i>Captcha</i> della scheda Sito contro widget veri, senza
+    andare a cercarsi un negozio che ne monti uno.
+  </p>
+
+  <div class="nota">
+    Le chiavi qui sotto sono quelle che i tre fornitori pubblicano apposta per
+    lo sviluppo: <b>passano sempre</b> e non proteggono niente. Le caselle le
+    spunti tu — la pagina non prova a superarle al posto tuo, e non saprebbe
+    come.
+  </div>
+
+  <div class="bar">
+    <button id="ricarica">Ricarica la pagina</button>
+    <button id="leggi">Leggi con captcha.js</button>
+    <span class="mono" id="conteggio"></span>
+  </div>
+
+  <fieldset>
+    <legend>reCAPTCHA v2 — casella</legend>
+    <div id="rc"></div>
+    <div class="stato">
+      <span>Token: <span class="pill assente" data-pill="recaptcha">assente</span></span>
+      <span class="mono" data-len="recaptcha">—</span>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>hCaptcha — casella</legend>
+    <!-- Montaggio implicito, con data-sitekey: è come lo mette quasi ogni
+         sito, ed è l'unico modo in cui la chiave resta leggibile dal DOM. -->
+    <div id="hc" class="h-captcha" data-sitekey="10000000-ffff-ffff-ffff-000000000001"></div>
+    <div class="stato">
+      <span>Token: <span class="pill assente" data-pill="hcaptcha">assente</span></span>
+      <span class="mono" data-len="hcaptcha">—</span>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Cloudflare Turnstile — gestito</legend>
+    <div id="ts" class="cf-turnstile" data-sitekey="1x00000000000000000000AA"></div>
+    <div class="stato">
+      <span>Token: <span class="pill assente" data-pill="turnstile">assente</span></span>
+      <span class="mono" data-len="turnstile">—</span>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Lettura di captcha.js</legend>
+    <div id="esito">Premi <b>Leggi con captcha.js</b>.</div>
+  </fieldset>
+
+  <script>
+  // Chiavi di test pubblicate dai tre fornitori. Non sono segrete e non
+  // valgono niente: servono solo a far comparire il widget.
+  var CHIAVI = {
+    recaptcha: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+    hcaptcha: '10000000-ffff-ffff-ffff-000000000001',
+    turnstile: '1x00000000000000000000AA'
+  };
+
+  function carica(src) {
+    return new Promise(function (ok, no) {
+      var s = document.createElement('script');
+      s.src = src; s.async = true; s.defer = true;
+      s.onload = ok;
+      s.onerror = function () { no(new Error('non raggiungibile: ' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function pill(id, testo, classe) {
+    var p = document.querySelector('[data-pill="' + id + '"]');
+    if (p) { p.textContent = testo; p.className = 'pill ' + classe; }
+  }
+
+  function lunghezza(id, n) {
+    var e = document.querySelector('[data-len="' + id + '"]');
+    if (e) e.textContent = n ? n + ' caratteri' : '—';
+  }
+
+  // Ogni libreria ha il suo modo di dare il token; qui si guarda solo per
+  // mostrare lo stato accanto al widget.
+  function token(id) {
+    try {
+      if (id === 'recaptcha' && globalThis.grecaptcha) return grecaptcha.getResponse() || '';
+      if (id === 'hcaptcha' && globalThis.hcaptcha) return hcaptcha.getResponse() || '';
+      if (id === 'turnstile' && globalThis.turnstile) return turnstile.getResponse() || '';
+    } catch (e) { /* widget non ancora registrato */ }
+    return '';
+  }
+
+  function aggiorna() {
+    var vivi = 0;
+    ['recaptcha', 'hcaptcha', 'turnstile'].forEach(function (id) {
+      var t = token(id);
+      if (t) vivi++;
+      pill(id, t ? 'valido' : 'assente', t ? 'valido' : 'assente');
+      lunghezza(id, t.length);
+    });
+    document.getElementById('conteggio').textContent = vivi + ' token vivi su 3';
+  }
+
+  async function monta() {
+    var errori = [];
+    try {
+      await carica('https://www.google.com/recaptcha/api.js?render=explicit');
+      grecaptcha.ready(function () {
+        grecaptcha.render('rc', { sitekey: CHIAVI.recaptcha });
+      });
+    } catch (e) { errori.push(e.message); document.getElementById('rc').textContent = 'reCAPTCHA ' + e.message; }
+
+    // hCaptcha e Turnstile si montano da sé sui div che portano la classe e
+    // la chiave: nessuna render() da chiamare.
+    try {
+      await carica('https://js.hcaptcha.com/1/api.js');
+    } catch (e) { errori.push(e.message); document.getElementById('hc').textContent = 'hCaptcha ' + e.message; }
+
+    try {
+      await carica('https://challenges.cloudflare.com/turnstile/v0/api.js');
+    } catch (e) { errori.push(e.message); document.getElementById('ts').textContent = 'Turnstile ' + e.message; }
+
+    setInterval(aggiorna, 1000);
+    aggiorna();
+  }
+
+  // Legge la pagina con lo stesso file che l'estensione inietta nel mondo
+  // MAIN: quello che si vede qui è quello che vedrà il popup.
+  async function leggiConCaptchaJs() {
+    var box = document.getElementById('esito');
+    try {
+      var src = await (await fetch('../captcha.js')).text();
+      (0, eval)(src);
+    } catch (e) {
+      box.textContent = 'captcha.js non caricato: ' + e.message;
+      return;
+    }
+    var res = globalThis.CaptchaCore.probe();
+    if (!res.presente) { box.textContent = 'Nessun captcha riconosciuto.'; return; }
+
+    var righe = res.fornitori.map(function (f) {
+      var stato = !f.gestito ? 'non gestito'
+        : f.valido ? 'valido, ' + f.restano + ' s di ' + f.ttl
+        : f.scaduto ? 'scaduto' : 'non risolto';
+      return '<tr><td>' + f.nome + '</td><td>' + f.versione + '</td>'
+           + '<td class="mono">' + (f.sitekey || '—') + '</td>'
+           + '<td class="' + (f.valido ? 'ok' : '') + '">' + stato + '</td></tr>';
+    }).join('');
+    box.innerHTML = '<p><b>' + res.fornitori.length + ' riconosciuti</b></p>'
+      + '<table><tr><th>Fornitore</th><th>Versione</th><th>Site key</th><th>Token</th></tr>'
+      + righe + '</table>';
+    window.__ultimo = res;
+  }
+
+  document.getElementById('ricarica').addEventListener('click', function () { location.reload(); });
+  document.getElementById('leggi').addEventListener('click', leggiConCaptchaJs);
+  window.__leggi = leggiConCaptchaJs;
+  monta();
+  </script>
+</body>
+</html>

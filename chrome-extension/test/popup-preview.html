@@ -7,53 +7,83 @@
 </head>
 <body>
   <script>
-    // Captcha finto per la scheda Sito. `window.__captcha` lo pilota dalla
-    // console: `__captcha.versione = 'v3'`, `__captcha.presente = false`,
-    // `__captcha.scadi()`.
+    // Captcha finti per il riquadro della scheda Sito. Dalla console:
+    // `__captcha.metti('hcaptcha')`, `__captcha.metti('recaptcha','turnstile')`,
+    // `__captcha.risolvi('hcaptcha')`, `__captcha.scadi('hcaptcha')`,
+    // `__captcha.vuoto()`.
+    const MODELLI = {
+      recaptcha: { nome: 'reCAPTCHA', gestito: true, ttl: 120,
+        versione: 'v2 — casella da spuntare', versioneId: 'v2', sfida: true,
+        sitekey: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+        azione: 'widget azzerato — la spunta va rimessa a mano' },
+      recaptchaV3: { id: 'recaptcha', nome: 'reCAPTCHA', gestito: true, ttl: 120,
+        versione: 'v3 — punteggio', versioneId: 'v3', sfida: false,
+        sitekey: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+        azione: 'token nuovo richiesto a Google' },
+      hcaptcha: { nome: 'hCaptcha', gestito: true, ttl: 120,
+        versione: 'casella da spuntare', versioneId: 'casella', sfida: true,
+        sitekey: '10000000-ffff-ffff-ffff-000000000001',
+        azione: 'widget azzerato — la spunta va rimessa a mano' },
+      turnstile: { nome: 'Cloudflare Turnstile', gestito: true, ttl: 300,
+        versione: 'gestito', versioneId: 'gestito', sfida: false,
+        sitekey: '1x00000000000000000000AA',
+        azione: 'widget azzerato — Turnstile riparte da solo' },
+      arkose: { nome: 'Arkose Labs / FunCaptcha', gestito: false,
+        versione: 'non gestito da qui' },
+      casalingo: { nome: 'Captcha a immagine (fatto in casa)', gestito: false,
+        versione: 'immagine e campo di testo' }
+    };
+
     const finto = window.__captcha = {
-      presente: true,
-      libreria: 'reCAPTCHA',
-      gestita: true,
-      versione: 'v2',            // 'v2' | 'v2i' | 'v3'
-      sitekey: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
-      ttl: 120,
-      emesso: 0, scaduto: false, emissioni: 0, scadenze: 0, rinnovi: 0,
-      risolvi() {
-        this.emesso = Date.now(); this.scaduto = false; this.emissioni++;
+      attivi: ['recaptcha'],
+      stato: {},
+      metti(...quali) { this.attivi = quali; this.stato = {}; },
+      vuoto() { this.attivi = []; },
+      st(id) {
+        if (!this.stato[id]) this.stato[id] = { emesso: 0, scaduto: false, emissioni: 0, scadenze: 0, rinnovi: 0 };
+        return this.stato[id];
       },
-      scadi() {
-        if (!this.emesso) return;
-        this.emesso = 0; this.scaduto = true; this.scadenze++;
+      risolvi(id) {
+        const s = this.st(id || this.attivi[0]);
+        s.emesso = Date.now(); s.scaduto = false; s.emissioni++;
+      },
+      scadi(id) {
+        const s = this.st(id || this.attivi[0]);
+        if (!s.emesso) return;
+        s.emesso = 0; s.scaduto = true; s.scadenze++;
       },
       probe() {
-        if (!this.presente) return { presente: false, libreria: null, versione: null };
-        const restano = this.emesso
-          ? Math.max(0, this.ttl - Math.round((Date.now() - this.emesso) / 1000)) : 0;
-        if (this.emesso && !restano) this.scadi();
-        const valido = !!this.emesso && !this.scaduto;
-        return {
-          presente: true, libreria: this.libreria, gestita: this.gestita,
-          versione: this.versione, sitekey: this.sitekey,
-          widget: this.versione === 'v3' ? 0 : 1, montato: this.versione !== 'v3',
-          apiPronta: true,
-          token: valido ? '03AFinto1234ab…' : '', tokenLungo: valido ? 248 : 0,
-          valido, scaduto: this.scaduto, restano,
-          emissioni: this.emissioni, scadenze: this.scadenze, rinnovi: this.rinnovi,
-          campo: this.versione === 'v3' ? 'input' : 'textarea'
-        };
+        const fornitori = this.attivi.map((chiave) => {
+          const m = MODELLI[chiave];
+          const id = m.id || chiave;
+          const base = { id, nome: m.nome, gestito: m.gestito, versione: m.versione,
+                         widget: 1, montato: true, sitekey: m.sitekey || '' };
+          if (!m.gestito) return base;
+          const s = this.st(id);
+          const restano = s.emesso
+            ? Math.max(0, m.ttl - Math.round((Date.now() - s.emesso) / 1000)) : 0;
+          if (s.emesso && !restano) this.scadi(id);
+          const valido = !!s.emesso && !s.scaduto;
+          return Object.assign(base, {
+            versioneId: m.versioneId, sfida: m.sfida, ttl: m.ttl, apiPronta: true,
+            token: valido ? '03AFinto1234ab…' : '', tokenLungo: valido ? 248 : 0,
+            valido, scaduto: s.scaduto, restano,
+            emissioni: s.emissioni, scadenze: s.scadenze, rinnovi: s.rinnovi,
+            campo: 'textarea'
+          });
+        });
+        return { presente: fornitori.length > 0, fornitori };
       },
-      rinnova() {
-        if (!this.presente) return { ok: false, motivo: 'nessun captcha in pagina' };
-        if (!this.gestita) return { ok: false, motivo: this.libreria + ' non è gestito qui' };
-        this.rinnovi++;
-        if (this.versione === 'v2') {
-          this.emesso = 0; this.scaduto = false;
-          return { ok: true, modo: 'v2', azione: 'widget azzerato — la spunta va rimessa a mano' };
-        }
-        this.risolvi();
-        return this.versione === 'v3'
-          ? { ok: true, modo: 'v3', azione: 'token nuovo richiesto a Google' }
-          : { ok: true, modo: 'v2i', azione: 'verifica invisibile rilanciata' };
+      rinnova(id) {
+        const chiave = this.attivi.find((k) => (MODELLI[k].id || k) === id);
+        if (!chiave) return { ok: false, motivo: 'fornitore sconosciuto: ' + id };
+        const m = MODELLI[chiave];
+        if (!m.gestito) return { ok: false, motivo: m.nome + " ha un'API chiusa: va rifatto a mano" };
+        const s = this.st(id);
+        s.rinnovi++;
+        if (m.sfida) { s.emesso = 0; s.scaduto = false; }
+        else { s.emesso = Date.now(); s.scaduto = false; s.emissioni++; }
+        return { ok: true, id, nome: m.nome, modo: m.versioneId, azione: m.azione, sfida: m.sfida };
       }
     };
 
@@ -79,7 +109,7 @@
           if (opts.files) return [{ result: null }];
           const src = String(opts.func || '');
           if (/CaptchaCore\.probe/.test(src)) return [{ result: finto.probe() }];
-          if (/CaptchaCore\.rinnova/.test(src)) return [{ result: finto.rinnova() }];
+          if (/CaptchaCore\.rinnova/.test(src)) return [{ result: finto.rinnova(...(opts.args || [])) }];
           return [{ result: { scanned: 0, filled: [] } }];
         }
       },

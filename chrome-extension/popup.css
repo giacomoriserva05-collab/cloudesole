@@ -125,6 +125,24 @@ input:focus, select:focus {
   border-radius: 6px; padding: 7px 9px; margin: 4px 0;
 }
 .hidden { display: none; }
+
+/* Riquadro: un blocco che si stacca dal resto del pannello. */
+.riquadro {
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg-soft); padding: 10px 11px 11px;
+}
+.riquadro-titolo {
+  font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); margin: 0 0 2px;
+}
+.riquadro .list li { background: var(--bg); }
+/* Intestazione di un fornitore, quando in pagina ce n'è più d'uno. */
+.list li.capo {
+  background: transparent; border: 0; border-top: 1px solid var(--line);
+  border-radius: 0; margin-top: 6px; padding: 7px 2px 2px;
+  font-weight: 600; font-size: 11px; letter-spacing: .03em;
+}
+.list li.capo:first-child { border-top: 0; margin-top: 0; padding-top: 2px; }
 hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
 kbd {
   font: inherit; font-size: 10px;

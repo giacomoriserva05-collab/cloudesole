@@ -149,3 +149,45 @@ Analisi sintattica di tutti i sorgenti Swift con `swiftc -parse` (toolchain da
 anche dove SwiftUI e WebKit non esistono: prende refusi, parentesi sbagliate e
 file troncati. Non prende errori di tipo né firme di API sbagliate — per quelli
 serve il runner macOS di `.github/workflows/ios-build.yml`.
+
+## Portarla sull'iPhone con TestFlight
+
+Serve l'**Apple Developer Program** (99 $/anno): è quello che sblocca la firma
+di distribuzione. TestFlight in sé è gratis. Fatto quello, non serve un Mac in
+nessun punto della catena.
+
+**Le quattro chiavi.** Su App Store Connect → *Utenti e accessi* →
+*Integrazioni* → *Chiavi App Store Connect*, genera una chiave con ruolo
+**App Manager**. Ti dà Issuer ID, Key ID e un file `.p8` scaricabile una volta
+sola. Il Team ID sta in *Appartenenza* sul portale sviluppatori.
+
+Vanno caricate come segreti del repository. **Falli tu**: la `.p8` è una chiave
+privata di firma e non deve passare per nessun altro.
+
+```bash
+gh secret set ASC_KEY_ID --repo <utente>/cloudesole
+gh secret set ASC_ISSUER_ID --repo <utente>/cloudesole
+gh secret set ASC_TEAM_ID --repo <utente>/cloudesole
+gh secret set ASC_KEY_P8 --repo <utente>/cloudesole < AuthKey_XXXXXXXX.p8
+```
+
+**Il caricamento** si avvia a mano, perché i minuti macOS non sono infiniti:
+
+```bash
+gh workflow run "Carica su TestFlight"
+```
+
+Il workflow controlla prima che i segreti ci siano, genera il progetto, compila
+in Release e carica. Certificato e profilo di provisioning se li crea Xcode al
+volo con `-allowProvisioningUpdates`: non c'è niente da installare a mano.
+
+Il numero di build è il numero della corsa di GitHub, così cresce sempre —
+TestFlight rifiuta due caricamenti con lo stesso numero.
+
+**Per te non serve nessuna revisione di Apple.** Come tester *interno* (sei nel
+tuo stesso team) la build è disponibile appena finisce l'elaborazione, dieci
+minuti circa. La revisione servirebbe solo per i tester esterni.
+
+> Questo workflow non è mai stato eseguito: senza credenziali non è
+> verificabile. La prima corsa è anche la prima prova, e qualche aggiustamento
+> è probabile.

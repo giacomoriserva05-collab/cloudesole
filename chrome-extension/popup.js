@@ -384,12 +384,6 @@ async function probeAutopilot() {
 
 // ------------------------------------------------------------- captcha
 
-const VERSIONI = {
-  v2: 'v2 — casella da spuntare',
-  v2i: 'v2 — invisibile',
-  v3: 'v3 — punteggio'
-};
-
 let captchaTimer = null;
 
 /** Gira dentro la pagina, nel mondo MAIN: `grecaptcha` non è visibile dal
@@ -404,41 +398,97 @@ async function inPagina(func, args) {
   return out && out.result;
 }
 
+/** Intestazione di un fornitore: si mostra solo quando in pagina ce n'è più
+ *  d'uno, altrimenti è rumore. */
+function capoRow(ul, testo) {
+  const li = document.createElement('li');
+  li.className = 'capo';
+  li.textContent = testo;
+  ul.appendChild(li);
+}
+
+function renderFornitore(ul, f, conCapo) {
+  if (conCapo) capoRow(ul, f.nome);
+  else probeRow(ul, 'Libreria', f.nome, f.gestito ? 'ok' : 'err');
+
+  if (!f.gestito) {
+    probeRow(ul, 'Stato', f.versione, 'err');
+    probeRow(ul, 'Rinnovo', 'non da qui: API chiusa, va rifatto a mano');
+    return;
+  }
+
+  probeRow(ul, 'Versione', f.versione, 'ok');
+  if (f.sitekey) probeRow(ul, 'Site key', f.sitekey.slice(0, 20) + (f.sitekey.length > 20 ? '…' : ''));
+  if (f.widget) {
+    probeRow(ul, 'Widget', f.widget + (f.montato ? ' (montato)' : ' (non ancora disegnato)'),
+      f.montato ? 'ok' : '');
+  }
+
+  const stato = f.valido ? 'valido' : (f.scaduto ? 'scaduto — va rifatto' : 'non ancora risolto');
+  probeRow(ul, 'Token', stato, f.valido ? 'ok' : (f.scaduto ? 'err' : ''));
+  if (f.valido) probeRow(ul, 'Scade fra', f.restano + ' s di ' + f.ttl, f.restano < 20 ? 'err' : 'ok');
+  if (f.tokenLungo) probeRow(ul, 'Lunghezza', f.tokenLungo + ' caratteri');
+  probeRow(ul, 'Giro', f.emissioni + ' emessi, ' + f.scadenze + ' scaduti, ' + f.rinnovi + ' rifatti');
+}
+
 function renderCaptcha(res) {
   const ul = $('#captcha-list');
   ul.innerHTML = '';
   const azioni = $('#captcha-actions');
+  const pickWrap = $('#captcha-pick-wrap');
+  const pick = $('#captcha-pick');
 
-  if (!res || !res.presente) {
+  if (!res || !res.presente || !res.fornitori.length) {
     probeRow(ul, 'Captcha', 'nessuno in questa pagina');
     azioni.classList.add('hidden');
     fermaOrologioCaptcha();
     return;
   }
 
-  probeRow(ul, 'Libreria', res.libreria, res.gestita ? 'ok' : 'err');
-  if (!res.gestita) {
-    probeRow(ul, 'Versione', 'non gestita: qui si gestisce solo reCAPTCHA', 'err');
+  const molti = res.fornitori.length > 1;
+  for (const f of res.fornitori) renderFornitore(ul, f, molti);
+
+  const rifacibili = res.fornitori.filter((f) => f.gestito);
+  if (!rifacibili.length) {
     azioni.classList.add('hidden');
     fermaOrologioCaptcha();
     return;
   }
 
-  probeRow(ul, 'Versione', VERSIONI[res.versione] || res.versione, 'ok');
-  if (res.sitekey) probeRow(ul, 'Site key', res.sitekey.slice(0, 20) + '…');
-  if (res.versione !== 'v3') {
-    probeRow(ul, 'Widget', res.widget
-      ? res.widget + (res.montato ? ' (montato)' : ' (non ancora disegnato)')
-      : 'montato dal sito a mano', res.montato ? 'ok' : '');
+  // La tendina serve solo quando c'è davvero una scelta da fare.
+  if (rifacibili.length > 1) {
+    const prima = pick.value;
+    pick.innerHTML = '';
+    for (const f of rifacibili) {
+      const o = document.createElement('option');
+      o.value = f.id;
+      o.textContent = f.nome;
+      pick.appendChild(o);
+    }
+    if (rifacibili.some((f) => f.id === prima)) pick.value = prima;
+    pickWrap.classList.remove('hidden');
+  } else {
+    pick.innerHTML = '';
+    const o = document.createElement('option');
+    o.value = rifacibili[0].id;
+    o.textContent = rifacibili[0].nome;
+    pick.appendChild(o);
+    pickWrap.classList.add('hidden');
   }
-
-  const stato = res.valido ? 'valido' : (res.scaduto ? 'scaduto — va rifatto' : 'non ancora risolto');
-  probeRow(ul, 'Token', stato, res.valido ? 'ok' : (res.scaduto ? 'err' : ''));
-  if (res.valido) probeRow(ul, 'Scade fra', res.restano + ' s', res.restano < 20 ? 'err' : 'ok');
-  if (res.tokenLungo) probeRow(ul, 'Lunghezza', res.tokenLungo + ' caratteri');
-  probeRow(ul, 'Giro', res.emissioni + ' emessi, ' + res.scadenze + ' scaduti, ' + res.rinnovi + ' rifatti');
-
   azioni.classList.remove('hidden');
+}
+
+function riassunto(res) {
+  if (!res || !res.presente) return { testo: 'Nessun captcha qui.', tono: 'ok' };
+  const gestiti = res.fornitori.filter((f) => f.gestito);
+  if (!gestiti.length) {
+    const nomi = res.fornitori.map((f) => f.nome).join(', ');
+    return { testo: nomi + ': lo vedo ma non posso rifarlo da qui.', tono: 'err' };
+  }
+  const f = gestiti.find((x) => x.scaduto) || gestiti.find((x) => !x.valido) || gestiti[0];
+  if (f.scaduto) return { testo: f.nome + ': token scaduto, va rifatta la verifica.', tono: 'err' };
+  if (!f.valido) return { testo: f.nome + ' ' + f.versione + ': verifica non ancora fatta.', tono: 'err' };
+  return { testo: f.nome + ' ' + f.versione + ', token valido per altri ' + f.restano + ' s.', tono: 'ok' };
 }
 
 async function probeCaptcha(silenzioso) {
@@ -452,20 +502,18 @@ async function probeCaptcha(silenzioso) {
   }
   renderCaptcha(res);
   if (!silenzioso) {
-    setStatus(!res || !res.presente ? 'Nessun captcha qui.'
-      : !res.gestita ? res.libreria + ': lo vedo ma non lo gestisco.'
-      : res.valido ? 'Captcha ' + res.versione + ', token valido per altri ' + res.restano + ' s.'
-      : res.scaduto ? 'Token scaduto: va rifatta la verifica.'
-      : 'Captcha ' + res.versione + ' in attesa: la verifica non è ancora stata fatta.',
-    res && res.presente && res.gestita && !res.valido ? 'err' : 'ok');
+    const r = riassunto(res);
+    setStatus(r.testo, r.tono);
   }
   return res;
 }
 
 async function renewCaptcha() {
+  const id = $('#captcha-pick').value;
+  if (!id) return;
   let res;
   try {
-    res = await inPagina(() => globalThis.CaptchaCore.rinnova());
+    res = await inPagina((quale) => globalThis.CaptchaCore.rinnova(quale), [id]);
   } catch (e) {
     setStatus('Rinnovo fallito: ' + (e.message || e), 'err');
     return;
@@ -474,9 +522,9 @@ async function renewCaptcha() {
     setStatus('Non si può rifare: ' + ((res && res.motivo) || 'motivo sconosciuto'), 'err');
     return;
   }
-  // Alla v3 serve un attimo: il token arriva da Google.
-  setTimeout(() => probeCaptcha(true), res.modo === 'v3' ? 1200 : 300);
-  setStatus(res.azione, res.modo === 'v2' ? '' : 'ok');
+  // Dove il token arriva dalla rete serve un attimo prima di rileggerlo.
+  setTimeout(() => probeCaptcha(true), res.sfida ? 300 : 1500);
+  setStatus(res.nome + ': ' + res.azione, res.sfida ? '' : 'ok');
 }
 
 function fermaOrologioCaptcha() {

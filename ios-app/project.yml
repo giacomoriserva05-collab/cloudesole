@@ -28,11 +28,16 @@ targets:
         buildPhase: resources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: it.local.checkoutautofill
+        PRODUCT_BUNDLE_IDENTIFIER: com.giacomoriserva.checkoutautofill
         INFOPLIST_FILE: CheckoutAutofill/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_VERSION: "5.9"
+        # La versione mostrata all'utente e il numero di build. Quest'ultimo
+        # lo sovrascrive la CI a ogni caricamento: TestFlight rifiuta due
+        # build con lo stesso numero.
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         ENABLE_USER_SCRIPT_SANDBOXING: NO
 
