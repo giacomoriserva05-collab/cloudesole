@@ -7,6 +7,15 @@ name: Carica su TestFlight
 on:
   workflow_dispatch:
     inputs:
+      prepara:
+        description: "Crea prima identificatore e scheda dell'app (solo la prima volta)"
+        type: boolean
+        required: false
+        default: false
+      nome_app:
+        description: "Nome dell'app su App Store Connect (dev'essere libero)"
+        required: false
+        default: "Checkout Autofill"
       note:
         description: "Nota per i tester (facoltativa)"
         required: false
@@ -46,6 +55,18 @@ jobs:
       - name: Genera il progetto Xcode
         working-directory: ios-app
         run: xcodegen generate
+
+      - name: Crea identificatore e scheda dell'app
+        if: ${{ inputs.prepara }}
+        working-directory: ios-app
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_TEAM_ID: ${{ secrets.ASC_TEAM_ID }}
+          APP_NAME: ${{ inputs.nome_app }}
+          FASTLANE_SKIP_UPDATE_CHECK: "1"
+        run: fastlane prepara
 
       - name: Compila, firma e carica
         working-directory: ios-app
