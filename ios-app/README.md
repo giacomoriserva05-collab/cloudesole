@@ -158,8 +158,13 @@ nessun punto della catena.
 
 **Le quattro chiavi.** Su App Store Connect → *Utenti e accessi* →
 *Integrazioni* → *Chiavi App Store Connect*, genera una chiave con ruolo
-**App Manager**. Ti dà Issuer ID, Key ID e un file `.p8` scaricabile una volta
-sola. Il Team ID sta in *Appartenenza* sul portale sviluppatori.
+**Admin**. Non *App Manager*: quel ruolo non può creare certificati e profili
+di firma, e l'esportazione muore con *"Cloud signing permission error — No
+profiles were found"*. Il ruolo di una chiave non si cambia dopo: va revocata
+e rifatta.
+
+Ti dà Issuer ID, Key ID e un file `.p8` scaricabile una volta sola. Il Team ID
+sta in *Appartenenza* sul portale sviluppatori.
 
 Vanno caricate come segreti del repository. **Falli tu**: la `.p8` è una chiave
 privata di firma e non deve passare per nessun altro.
