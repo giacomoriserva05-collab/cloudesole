@@ -54,6 +54,64 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build 2>&1 | tee build.log
 
+      # Compilare non è funzionare: qui l'app viene davvero installata su un
+      # iPhone simulato, avviata, e fotografata. È il primo momento in cui
+      # qualcuno la vede in faccia.
+      - name: Avvia nel simulatore e fotografa
+        working-directory: ios-app
+        run: |
+          set -e
+          mkdir -p schermate
+
+          # Si prende il primo iPhone disponibile invece di fissare un nome:
+          # l'elenco dei simulatori cambia a ogni versione di Xcode.
+          UDID=$(xcrun simctl list devices available -j \
+                 | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(v['udid'] for r in d.values() for v in r if 'iPhone' in v['name']))")
+          NOME=$(xcrun simctl list devices | grep "$UDID" | sed 's/ (.*//' | xargs)
+          echo "Simulatore: $NOME  ($UDID)"
+
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+
+          xcodebuild -project CheckoutAutofill.xcodeproj \
+                     -scheme CheckoutAutofill \
+                     -destination "id=$UDID" \
+                     -configuration Debug \
+                     -derivedDataPath dd \
+                     CODE_SIGNING_ALLOWED=NO \
+                     build > /dev/null
+
+          APP=$(find dd/Build/Products -name "CheckoutAutofill.app" -maxdepth 3 | head -1)
+          echo "Pacchetto: $APP"
+          echo "--- risorse dentro il pacchetto ---"
+          ls "$APP" | grep -E "\.js$" || echo "ATTENZIONE: nessun file JavaScript nel pacchetto"
+
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" com.giacomoriserva.checkoutautofill
+
+          sleep 6
+          xcrun simctl io "$UDID" screenshot schermate/1-avvio.png
+          sleep 12
+          xcrun simctl io "$UDID" screenshot schermate/2-dopo-il-caricamento.png
+
+          # Se è morta subito, il processo non c'è più.
+          if xcrun simctl spawn "$UDID" launchctl list | grep -q checkoutautofill; then
+            echo "L'app è viva."
+          else
+            echo "::warning::L'app non risulta in esecuzione: potrebbe essere crollata."
+          fi
+
+      - name: Conserva schermate e resoconti di crash
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: schermate
+          path: |
+            ios-app/schermate/*.png
+            ~/Library/Logs/DiagnosticReports/*
+          if-no-files-found: warn
+          retention-days: 7
+
       # Il log di xcodebuild è enorme: quando fallisce serve solo questo.
       - name: Gli errori, senza il contorno
         if: failure()
