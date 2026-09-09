@@ -12,31 +12,11 @@
 default_platform(:ios)
 
 platform :ios do
-  # Registra l'identificatore dell'app sul portale sviluppatori e crea la
-  # scheda su App Store Connect. Sono i due passaggi che altrimenti andrebbero
-  # fatti a mano nel sito: con la chiave API si fanno da qui, una volta sola.
-  desc "Crea identificatore e scheda dell'app (da eseguire una volta)"
-  lane :prepara do
-    chiave = app_store_connect_api_key(
-      key_id: ENV.fetch("ASC_KEY_ID"),
-      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
-      key_content: ENV.fetch("ASC_KEY_P8"),
-      is_key_content_base64: false,
-      in_house: false
-    )
-
-    produce(
-      api_key: chiave,
-      app_identifier: "com.giacomoriserva.checkoutautofill",
-      app_name: ENV.fetch("APP_NAME", "Checkout Autofill"),
-      language: "Italian",
-      sku: "checkoutautofill01",
-      team_id: ENV.fetch("ASC_TEAM_ID"),
-      skip_itc: false,
-      skip_devcenter: false
-    )
-  end
-
+  # L'identificatore dell'app e la scheda su App Store Connect vanno creati a
+  # mano dal sito, una volta sola. Non è una dimenticanza: `fastlane produce`
+  # sa autenticarsi solo con Apple ID e password, non con la chiave API — le
+  # sue opzioni non prevedono proprio `api_key` — e le password qui non
+  # passano. Tutto il resto, dalla firma al caricamento, è automatico.
   desc "Compila in Release e carica su TestFlight (tester interni)"
   lane :beta do
     chiave = app_store_connect_api_key(
