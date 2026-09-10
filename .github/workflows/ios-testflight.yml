@@ -47,6 +47,21 @@ jobs:
         working-directory: ios-app
         run: xcodegen generate
 
+      # Fa spazio prima di firmare. Se fallisce si tira dritto: il suo
+      # scopo e' evitare un intoppo fra dieci build, non causarne uno adesso.
+      - name: Fa spazio fra i certificati
+        continue-on-error: true
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check cryptography
+          chiave="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s' "$ASC_KEY_P8" > "$chiave"
+          chmod 600 "$chiave"
+          ASC_KEY_PATH="$chiave" python3 ios-app/tools/pulisci-certificati.py
+
       - name: Compila, firma e carica
         working-directory: ios-app
         env:
