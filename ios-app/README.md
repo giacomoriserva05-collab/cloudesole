@@ -161,6 +161,23 @@ anche dove SwiftUI e WebKit non esistono: prende refusi, parentesi sbagliate e
 file troncati. Non prende errori di tipo né firme di API sbagliate — per quelli
 serve il runner macOS di `.github/workflows/ios-build.yml`.
 
+## Quanto costa la compilazione automatica
+
+I runner macOS di GitHub si contano **dieci volte** i minuti reali. Su un
+repository privato il piano gratuito ne dà 2000, cioè circa 200 minuti macOS:
+una trentina di build complete, e poi ci si ferma.
+
+Per questo a ogni push si compila e basta, due minuti scarsi. Simulatore,
+schermate e test d'interfaccia — che da soli triplicano la durata — girano
+solo su richiesta:
+
+```bash
+gh workflow run "Compila l'app iOS" -f completo=true
+```
+
+Sui repository pubblici i runner standard sono gratuiti e senza tetto, quindi
+il problema non si pone.
+
 ## Portarla sull'iPhone con TestFlight
 
 Serve l'**Apple Developer Program** (99 $/anno): è quello che sblocca la firma

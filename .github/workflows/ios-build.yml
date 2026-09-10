@@ -14,7 +14,13 @@ on:
   pull_request:
     paths:
       - 'ios-app/**'
-  workflow_dispatch:        # avviabile a mano da gh o dal sito
+  workflow_dispatch:
+    inputs:
+      completo:
+        description: "Esegui anche simulatore, schermate e test d'interfaccia"
+        type: boolean
+        required: false
+        default: true        # avviabile a mano da gh o dal sito
 
 jobs:
   build:
@@ -58,6 +64,7 @@ jobs:
       # iPhone simulato, avviata, e fotografata. È il primo momento in cui
       # qualcuno la vede in faccia.
       - name: Avvia nel simulatore e fotografa
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.completo }}
         working-directory: ios-app
         run: |
           set -e
@@ -103,6 +110,7 @@ jobs:
 
       # Avviare l'app non basta: un crollo si vede aprendo le schede.
       - name: Tocca le schede e verifica che non crolli
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.completo }}
         working-directory: ios-app
         run: |
           set -o pipefail
@@ -117,7 +125,7 @@ jobs:
           echo "Le schede si aprono senza crollare."
 
       - name: Conserva schermate e resoconti di crash
-        if: always()
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.completo }}
         uses: actions/upload-artifact@v4
         with:
           name: schermate
