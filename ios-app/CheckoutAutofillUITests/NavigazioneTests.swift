@@ -51,6 +51,43 @@ final class NavigazioneTests: XCTestCase {
         }
     }
 
+    /// Il passaggio elenco ↔ pagina, avanti e indietro più volte.
+    ///
+    /// È il punto che ha fatto crollare l'app su un telefono vero: la
+    /// WKWebView veniva tolta e rimessa nell'albero delle viste dentro la
+    /// gestione del tocco, e UIKit abortiva in
+    /// `-[UIGestureRecognizer _delayTouchesForEvent:]`. Ora le due schermate
+    /// restano montate entrambe; questo test serve a tenerle tali.
+    func testAvantiIndietroFraElencoEPagina() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let negozio = app.tabBars.buttons["Negozio"]
+        XCTAssertTrue(negozio.waitForExistence(timeout: 10))
+        negozio.tap()
+
+        for giro in 1...3 {
+            // Il primo riquadro dell'elenco: apre il negozio.
+            let riquadro = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Supreme'")).firstMatch
+            guard riquadro.waitForExistence(timeout: 6) else { break }
+            riquadro.tap()
+            Thread.sleep(forTimeInterval: 2.0)
+            XCTAssertEqual(app.state, .runningForeground,
+                           "Crollo aprendo il negozio, giro \(giro).")
+
+            // Il pulsante a griglia riporta all'elenco.
+            let griglia = app.buttons["square.grid.2x2"].firstMatch
+            if griglia.waitForExistence(timeout: 4) {
+                griglia.tap()
+            } else {
+                app.buttons.element(boundBy: 0).tap()
+            }
+            Thread.sleep(forTimeInterval: 1.2)
+            XCTAssertEqual(app.state, .runningForeground,
+                           "Crollo tornando all'elenco, giro \(giro).")
+        }
+    }
+
     /// Il monitor con un target vero: è il codice nuovo, ed è quello che il
     /// solo avvio non esercita mai.
     func testIlMonitorSiAvvia() throws {

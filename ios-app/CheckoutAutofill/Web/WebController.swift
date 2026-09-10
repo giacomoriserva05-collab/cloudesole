@@ -115,8 +115,11 @@ final class WebController: NSObject, ObservableObject {
             url = URL(string: "https://" + pulito)
         }
         guard let url else { return }
-        mostraElenco = false
         webView.load(URLRequest(url: url))
+        // Il passaggio si fa al giro successivo del ciclo principale: cambiare
+        // stato dentro la gestione di un tocco significa riorganizzare le
+        // viste mentre UIKit sta ancora consegnando quel tocco.
+        DispatchQueue.main.async { self.mostraElenco = false }
     }
 
     func indietro() { webView.goBack() }

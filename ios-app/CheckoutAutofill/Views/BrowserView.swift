@@ -12,16 +12,26 @@ struct BrowserView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if web.mostraElenco { intestazioneElenco } else { barraIndirizzo }
+            testata
             Divider()
 
-            if web.mostraElenco {
+            // Elenco e pagina restano **tutti e due montati**, e si alternano
+            // per trasparenza. Toglierli e rimetterli nell'albero delle viste
+            // faceva crollare UIKit: il cambio avveniva dentro la gestione del
+            // tocco che l'aveva provocato, e i riconoscitori di gesti della
+            // WKWebView si ritrovavano a metà strada
+            // (-[UIGestureRecognizer _delayTouchesForEvent:], oggetto nullo).
+            ZStack(alignment: .bottom) {
+                WebView(webView: web.webView)
+                    .opacity(web.mostraElenco ? 0 : 1)
+                    .allowsHitTesting(!web.mostraElenco)
+
                 ShopsView()
-            } else {
-                ZStack(alignment: .bottom) {
-                    WebView(webView: web.webView)
-                    if let b = web.banner { riquadro(b) }
-                }
+                    .background(Color(.systemBackground))
+                    .opacity(web.mostraElenco ? 1 : 0)
+                    .allowsHitTesting(web.mostraElenco)
+
+                if let b = web.banner { riquadro(b) }
             }
 
             Divider()
@@ -38,23 +48,19 @@ struct BrowserView: View {
 
     // MARK: - Testate
 
-    private var intestazioneElenco: some View {
+    /// Una testata sola per i due stati: cambia il titolo, ma il campo di
+    /// testo resta sempre lo stesso e non lascia mai l'albero delle viste.
+    private var testata: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Negozi")
-                .font(.title2.weight(.bold))
+            if web.mostraElenco {
+                Text("Negozi").font(.title2.weight(.bold))
+            }
             campoIndirizzo
         }
         .padding(.horizontal, 14)
-        .padding(.top, 10)
+        .padding(.top, web.mostraElenco ? 10 : 8)
         .padding(.bottom, 8)
         .background(.bar)
-    }
-
-    private var barraIndirizzo: some View {
-        campoIndirizzo
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.bar)
     }
 
     /// Lo stesso campo nei due stati: da qui si può sempre andare altrove,
