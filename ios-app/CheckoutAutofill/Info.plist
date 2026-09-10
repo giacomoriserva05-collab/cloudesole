@@ -22,6 +22,13 @@
     <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <!-- Dichiarazione di conformità all'esportazione. L'app non implementa
+         crittografia propria: usa solo HTTPS della WKWebView e il portachiavi
+         di iOS, entrambi esenti. Con questa chiave App Store Connect smette
+         di chiedere a ogni caricamento. Da rivedere se un domani si aggiunge
+         cifratura scritta da noi. -->
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>UILaunchScreen</key>
     <dict/>
     <key>UIApplicationSceneManifest</key>
