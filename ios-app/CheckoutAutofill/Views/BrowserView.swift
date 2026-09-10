@@ -31,7 +31,10 @@ struct BrowserView: View {
                     .opacity(web.mostraElenco ? 1 : 0)
                     .allowsHitTesting(web.mostraElenco)
 
-                if let b = web.banner { riquadro(b) }
+                // Anche l'avviso resta montato. Comparire e sparire mentre
+                // il pilota lavora significherebbe cambiare l'albero mentre
+                // hai il dito sulla pagina: e' la stessa trappola di prima.
+                riquadro
             }
 
             Divider()
@@ -81,10 +84,12 @@ struct BrowserView: View {
                     web.vai(a: indirizzo)
                     scriveIndirizzo = false
                 }
-            if !indirizzo.isEmpty && scriveIndirizzo {
-                Button { indirizzo = "" } label: { Image(systemName: "xmark.circle.fill") }
-                    .foregroundStyle(.secondary)
-            }
+            // Anche questo si spegne invece di sparire: comparirebbe mentre
+            // scrivi, cioe' mentre stai toccando la tastiera.
+            Button { indirizzo = "" } label: { Image(systemName: "xmark.circle.fill") }
+                .foregroundStyle(.secondary)
+                .disabled(indirizzo.isEmpty || !scriveIndirizzo)
+                .opacity(!indirizzo.isEmpty && scriveIndirizzo ? 1 : 0)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
@@ -104,21 +109,21 @@ struct BrowserView: View {
             Button { web.ricarica() } label: { Image(systemName: "arrow.clockwise") }
                 .disabled(web.mostraElenco)
 
-            // Compare solo dove serve: quando la pagina ha un modulo di
-            // accesso. Se non hai ancora salvato l'account, lo chiede.
-            if web.moduloAccesso && !web.mostraElenco {
-                Button {
-                    if let voce = store.account(per: web.host) {
-                        web.accedi(con: voce, store: store)
-                    } else {
-                        mostraNuovoAccount = true
-                    }
-                } label: {
-                    Image(systemName: store.account(per: web.host) != nil
-                          ? "key.fill" : "key")
-                        .foregroundStyle(store.account(per: web.host) != nil ? Color.accentColor : Color.secondary)
+            // Serve solo dove c'e' un modulo di accesso, ma non compare e
+            // sparisce: si spegne. Aggiungere un pulsante alla barra mentre
+            // stai toccando lo schermo cambia l'albero delle viste sotto le
+            // dita di UIKit, ed e' cosi' che l'app crollava.
+            Button {
+                if let voce = store.account(per: web.host) {
+                    web.accedi(con: voce, store: store)
+                } else {
+                    mostraNuovoAccount = true
                 }
+            } label: {
+                Image(systemName: store.account(per: web.host) != nil ? "key.fill" : "key")
             }
+            .disabled(!web.moduloAccesso || web.mostraElenco)
+            .opacity(web.moduloAccesso && !web.mostraElenco ? 1 : 0)
 
             Spacer()
 
@@ -151,17 +156,19 @@ struct BrowserView: View {
 
     // MARK: - Avvisi
 
-    private func riquadro(_ b: WebController.Banner) -> some View {
-        Text(b.text)
+    private var riquadro: some View {
+        Text(web.banner?.text ?? "")
             .font(.footnote)
             .foregroundStyle(.white)
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(colore(b.tone), in: RoundedRectangle(cornerRadius: 10))
+            .background(colore(web.banner?.tone ?? "ok"), in: RoundedRectangle(cornerRadius: 10))
             .padding(12)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-            .animation(.easeOut(duration: 0.2), value: b.id)
+            .opacity(web.banner == nil ? 0 : 1)
+            // Non deve mai rubare un tocco alla pagina sotto.
+            .allowsHitTesting(false)
+            .animation(.easeOut(duration: 0.2), value: web.banner?.id)
     }
 
     private func colore(_ tono: String) -> Color {
