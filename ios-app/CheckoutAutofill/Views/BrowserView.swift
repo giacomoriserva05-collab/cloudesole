@@ -168,6 +168,7 @@ struct BrowserView: View {
         Text(web.banner?.text ?? "")
             .font(.footnote)
             .foregroundStyle(.white)
+            .lineLimit(3)
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)

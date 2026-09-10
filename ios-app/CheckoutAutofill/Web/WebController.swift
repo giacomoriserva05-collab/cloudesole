@@ -290,12 +290,24 @@ extension WebController: WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        mostra("Pagina non caricata: \(error.localizedDescription)", tono: "err")
+        mostra(motivo(error), tono: "err")
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         let e = error as NSError
         guard e.code != NSURLErrorCancelled else { return }
-        mostra("Pagina non caricata: \(error.localizedDescription)", tono: "err")
+        mostra(motivo(error), tono: "err")
+    }
+
+    /// Dice anche *quale* indirizzo non ha funzionato. Senza, una barra rossa
+    /// che dice solo "server non trovato" non fa capire che il guaio era un
+    /// indirizzo storto: era esattamente il caso degli avvisi del monitor.
+    private func motivo(_ errore: Error) -> String {
+        let e = errore as NSError
+        let dove = e.userInfo[NSURLErrorFailingURLStringErrorKey] as? String
+        guard let dove, !dove.isEmpty else {
+            return "Pagina non caricata: \(e.localizedDescription)"
+        }
+        return "Pagina non caricata: \(e.localizedDescription)\n\(dove)"
     }
 }
