@@ -16,6 +16,10 @@ final class WebController: NSObject, ObservableObject {
     @Published var banner: Banner?
     @Published var ultimoEsito: FillResult?
 
+    /// Vero quando in scheda Negozio si vede l'elenco dei negozi invece della
+    /// pagina. È lo stato in cui l'app si apre.
+    @Published var mostraElenco = true
+
     struct Banner: Identifiable, Equatable {
         let id = UUID()
         var text: String
@@ -107,6 +111,7 @@ final class WebController: NSObject, ObservableObject {
             url = URL(string: "https://" + pulito)
         }
         guard let url else { return }
+        mostraElenco = false
         webView.load(URLRequest(url: url))
     }
 

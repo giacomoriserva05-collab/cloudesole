@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Il negozio si naviga qui dentro. È l'unico posto in cui il pilota può
-/// agire: fuori dall'app, in Safari, nessuna app può intervenire sulle pagine.
+/// La scheda Negozio. Si apre sull'elenco dei negozi salvati, non su una
+/// pagina web: tocchi un riquadro e il sito si apre lì dentro, dove il pilota
+/// può agire. Fuori dall'app, in Safari, nessuna app può intervenire.
 struct BrowserView: View {
     @EnvironmentObject var store: Store
     @EnvironmentObject var web: WebController
@@ -10,26 +11,52 @@ struct BrowserView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            barraIndirizzo
+            if web.mostraElenco { intestazioneElenco } else { barraIndirizzo }
             Divider()
-            ZStack(alignment: .bottom) {
-                WebView(webView: web.webView)
-                if let b = web.banner { riquadro(b) }
+
+            if web.mostraElenco {
+                ShopsView()
+            } else {
+                ZStack(alignment: .bottom) {
+                    WebView(webView: web.webView)
+                    if let b = web.banner { riquadro(b) }
+                }
             }
+
             Divider()
             barraStrumenti
-        }
-        .onAppear {
-            if web.currentURL == nil { web.vai(a: "https://www.google.com") }
         }
         .onChange(of: web.currentURL) { nuovo in
             if !scriveIndirizzo { indirizzo = nuovo?.absoluteString ?? "" }
         }
     }
 
+    // MARK: - Testate
+
+    private var intestazioneElenco: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Negozi")
+                .font(.title2.weight(.bold))
+            campoIndirizzo
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background(.bar)
+    }
+
     private var barraIndirizzo: some View {
+        campoIndirizzo
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(.bar)
+    }
+
+    /// Lo stesso campo nei due stati: da qui si può sempre andare altrove,
+    /// anche se il negozio non è nell'elenco.
+    private var campoIndirizzo: some View {
         HStack(spacing: 8) {
-            Image(systemName: web.isLoading ? "arrow.triangle.2.circlepath" : "lock.fill")
+            Image(systemName: web.isLoading ? "arrow.triangle.2.circlepath" : "magnifyingglass")
                 .foregroundStyle(.secondary)
                 .font(.footnote)
             TextField("Indirizzo o ricerca", text: $indirizzo)
@@ -48,25 +75,30 @@ struct BrowserView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.bar)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color.secondary.opacity(0.12), in: Capsule())
     }
 
+    // MARK: - Barra in fondo
+
     private var barraStrumenti: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 16) {
+            Button { web.mostraElenco = true } label: { Image(systemName: "square.grid.2x2") }
+                .disabled(web.mostraElenco)
             Button { web.indietro() } label: { Image(systemName: "chevron.left") }
-                .disabled(!web.canGoBack)
+                .disabled(!web.canGoBack || web.mostraElenco)
             Button { web.avanti() } label: { Image(systemName: "chevron.right") }
-                .disabled(!web.canGoForward)
+                .disabled(!web.canGoForward || web.mostraElenco)
             Button { web.ricarica() } label: { Image(systemName: "arrow.clockwise") }
+                .disabled(web.mostraElenco)
 
             Spacer()
 
             Button { web.compilaAdesso() } label: {
-                Label("Compila", systemImage: "square.and.pencil")
-                    .labelStyle(.iconOnly)
+                Label("Compila", systemImage: "square.and.pencil").labelStyle(.iconOnly)
             }
+            .disabled(web.mostraElenco)
 
             Button {
                 store.armed.toggle()
@@ -75,7 +107,8 @@ struct BrowserView: View {
                            : "Pilota spento: non tocca più nessuna pagina.",
                            tono: "ok")
             } label: {
-                Label(store.armed ? "Attivo" : "Attiva", systemImage: store.armed ? "bolt.fill" : "bolt.slash")
+                Label(store.armed ? "Attivo" : "Attiva",
+                      systemImage: store.armed ? "bolt.fill" : "bolt.slash")
                     .font(.callout.weight(.semibold))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
@@ -88,6 +121,8 @@ struct BrowserView: View {
         .padding(.vertical, 10)
         .background(.bar)
     }
+
+    // MARK: - Avvisi
 
     private func riquadro(_ b: WebController.Banner) -> some View {
         Text(b.text)

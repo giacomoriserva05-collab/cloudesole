@@ -213,3 +213,45 @@ struct ProbeResult: Decodable {
     var campiCompilabili = 0
     var campi: [FilledField] = []
 }
+
+// MARK: - Negozi salvati
+
+/// Un riquadro nella schermata iniziale: tocchi e si apre il negozio.
+struct Shop: Codable, Identifiable, Equatable {
+    var id: String = UUID().uuidString
+    var nome: String
+    var indirizzo: String
+
+    /// Le iniziali per il riquadro: "Foot Locker" diventa "FL".
+    var sigla: String {
+        let parole = nome.split(separator: " ").prefix(2)
+        let lettere = parole.compactMap { $0.first }.map(String.init)
+        return lettere.joined().uppercased()
+    }
+
+    /// Tinta ricavata dal nome. Non si usa `hashValue`: in Swift cambia a
+    /// ogni avvio, e i colori ballerebbero da una volta all'altra.
+    var tinta: Double {
+        var somma = 0
+        for u in nome.unicodeScalars { somma = (somma &* 31 &+ Int(u.value)) % 360 }
+        return Double(somma) / 360.0
+    }
+}
+
+/// Quelli che ci sono al primo avvio. Si aggiungono, si tolgono, si cambiano.
+enum NegoziPredefiniti {
+    static let all: [Shop] = [
+        Shop(nome: "Supreme", indirizzo: "https://eu.supreme.com"),
+        Shop(nome: "Nike", indirizzo: "https://www.nike.com/it/"),
+        Shop(nome: "SNKRS", indirizzo: "https://www.nike.com/it/launch"),
+        Shop(nome: "Slam Jam", indirizzo: "https://www.slamjam.com/it_IT/"),
+        Shop(nome: "Foot Locker", indirizzo: "https://www.footlocker.it"),
+        Shop(nome: "JD Sports", indirizzo: "https://www.jdsports.it"),
+        Shop(nome: "Snipes", indirizzo: "https://www.snipes.it"),
+        Shop(nome: "AW LAB", indirizzo: "https://www.awlab.com/it_it/"),
+        Shop(nome: "END.", indirizzo: "https://www.endclothing.com/it"),
+        Shop(nome: "Zalando", indirizzo: "https://www.zalando.it"),
+        Shop(nome: "GameLife", indirizzo: "https://www.gamelife.it"),
+        Shop(nome: "Size?", indirizzo: "https://www.size.co.uk")
+    ]
+}

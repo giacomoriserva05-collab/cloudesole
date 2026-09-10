@@ -10,6 +10,10 @@ final class Store: ObservableObject {
     @Published var sites: [String: SiteConfig] { didSet { salva() } }
     @Published var armed = false { didSet { salva() } }
 
+    /// I negozi della schermata iniziale. Al primo avvio ci sono quelli
+    /// predefiniti; da lì in poi comanda l'utente.
+    @Published var shops: [Shop] = [] { didSet { salva() } }
+
     /// Le carte, una per profilo. Se non le ricordi restano solo qui in
     /// memoria e spariscono chiudendo l'app.
     @Published private(set) var cards: [String: Card] = [:]
@@ -30,6 +34,8 @@ final class Store: ObservableObject {
         sites = (ud.data(forKey: "sites").flatMap { try? dec.decode([String: SiteConfig].self, from: $0) })
             ?? [:]
         armed = ud.bool(forKey: "armed")
+        shops = (ud.data(forKey: "shops").flatMap { try? dec.decode([Shop].self, from: $0) })
+            ?? NegoziPredefiniti.all
 
         if profiles.isEmpty { profiles = [Profile.principale()] }
         if !profiles.contains(where: { $0.id == activeID }) { activeID = profiles[0].id }
@@ -108,6 +114,28 @@ final class Store: ObservableObject {
         }
     }
 
+    // MARK: - Negozi
+
+    func aggiungiNegozio(nome: String, indirizzo: String) {
+        let n = nome.trimmingCharacters(in: .whitespaces)
+        var url = indirizzo.trimmingCharacters(in: .whitespaces)
+        guard !n.isEmpty, !url.isEmpty else { return }
+        if !url.lowercased().hasPrefix("http") { url = "https://" + url }
+        shops.append(Shop(nome: n, indirizzo: url))
+    }
+
+    func rimuoviNegozio(_ negozio: Shop) {
+        shops.removeAll { $0.id == negozio.id }
+    }
+
+    func spostaNegozi(da: IndexSet, a: Int) {
+        shops.move(fromOffsets: da, toOffset: a)
+    }
+
+    func ripristinaNegozi() {
+        shops = NegoziPredefiniti.all
+    }
+
     // MARK: - Regole per sito
 
     func site(for host: String) -> SiteConfig {
@@ -157,6 +185,7 @@ final class Store: ObservableObject {
         if let x = try? enc.encode(profiles) { d.set(x, forKey: "profiles") }
         if let x = try? enc.encode(settings) { d.set(x, forKey: "settings") }
         if let x = try? enc.encode(sites) { d.set(x, forKey: "sites") }
+        if let x = try? enc.encode(shops) { d.set(x, forKey: "shops") }
         d.set(activeID, forKey: "activeID")
         d.set(armed, forKey: "armed")
     }
