@@ -50,6 +50,17 @@ final class WebController: NSObject, ObservableObject {
         // riconoscitori di gesti pensati per un controller di navigazione,
         // che qui non c'è. Avanti e indietro stanno nella barra in basso.
         webView.allowsBackForwardNavigationGestures = false
+
+        // Il ritardo dei tocchi è esattamente il meccanismo che va in pezzi:
+        // nel resoconto di crash l'ultima chiamata prima dell'abort è
+        // -[UIGestureRecognizer _delayTouchesForEvent:inPhase:], che viene
+        // eseguita solo dalle viste a scorrimento che trattengono i tocchi
+        // per decidere a chi darli. Spegnendolo quel codice non gira più.
+        //
+        // Si perde poco: i pulsanti della pagina reagiscono subito invece di
+        // aspettare di capire se stavi cominciando a scorrere.
+        webView.scrollView.delaysContentTouches = false
+        webView.scrollView.canCancelContentTouches = true
         webView.navigationDelegate = self
         config.userContentController.add(self, contentWorld: mondo, name: "autofill")
         ricaricaScript()
