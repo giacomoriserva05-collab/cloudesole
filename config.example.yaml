@@ -48,6 +48,26 @@ notifiers:
     # Impostazioni del canale -> Integrazioni -> Webhook -> Copia URL
     webhook_url: ""
 
+  # Notifiche sull'iPhone, anche ad app chiusa.
+  #
+  # L'app iOS non puo' interrogare i siti da chiusa: il sistema la sospende in
+  # pochi secondi. Questo monitor invece gira di continuo, quindi e' lui a
+  # mandare l'avviso passando dai server di Apple. Toccando la notifica, l'app
+  # si apre sulla pagina del prodotto.
+  #
+  # La chiave si crea su developer.apple.com in Certificates, Identifiers &
+  # Profiles -> Keys -> Apple Push Notifications service (APNs): e' diversa da
+  # quella di App Store Connect. Il codice del telefono si copia dall'app,
+  # scheda Monitor.
+  apns:
+    enabled: false
+    key_file: "AuthKey_XXXXXXXXXX.p8"
+    key_id: ""
+    team_id: ""
+    topic: "com.giacomoriserva.checkoutautofill"
+    devices: []
+    # sandbox: true   # solo per build installate da Xcode, non da TestFlight
+
 # ---------------------------------------------------------------------------
 # Target
 # ---------------------------------------------------------------------------

@@ -156,7 +156,8 @@ final class MonitorEngine: NSObject, ObservableObject {
         }
         var richiesta = URLRequest(url: url)
         richiesta.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        richiesta.setValue("application/json", forHTTPHeaderField: "Accept")
+        richiesta.setValue(t.tipo == .pagina ? "text/html,application/xhtml+xml" : "application/json",
+                           forHTTPHeaderField: "Accept")
         richiesta.timeoutInterval = 15
         richiesta.cachePolicy = .reloadIgnoringLocalCacheData
 
@@ -169,6 +170,8 @@ final class MonitorEngine: NSObject, ObservableObject {
         switch t.tipo {
         case .prodotto: return try leggiProdotto(t, dati)
         case .collezione: return try leggiCollezione(t, dati)
+        case .pagina: return try leggiPagina(t, dati)
+        case .json: return try leggiJson(t, dati)
         }
     }
 
@@ -177,10 +180,16 @@ final class MonitorEngine: NSObject, ObservableObject {
         var s = t.url.trimmingCharacters(in: .whitespaces)
         if let taglio = s.firstIndex(of: "?") { s = String(s[s.startIndex..<taglio]) }
         while s.hasSuffix("/") { s.removeLast() }
+        // Per pagina e json l'indirizzo è già quello giusto: lo si interroga
+        // com'è, compresa la stringa di ricerca, che spesso conta.
+        if t.tipo == .pagina || t.tipo == .json {
+            return t.url.trimmingCharacters(in: .whitespaces)
+        }
         if s.hasSuffix(".js") || s.hasSuffix(".json") { return s }
         switch t.tipo {
         case .prodotto: return s + ".js"
         case .collezione: return s + "/products.json?limit=250"
+        default: return s
         }
     }
 
@@ -240,6 +249,119 @@ final class MonitorEngine: NSObject, ObservableObject {
         guard !volute.isEmpty else { return true }
         let n = Taglie.canonica(nome)
         return volute.contains { Taglie.canonica($0) == n }
+    }
+
+    // MARK: - Pagina qualsiasi, per marcatori
+
+    /// Decide leggendo cosa c'è scritto nella pagina. **L'esaurito ha la
+    /// precedenza**: se la pagina dichiara che il prodotto non c'è, quello
+    /// vince su ogni indizio contrario. È la stessa regola del desktop, e
+    /// nasce dal fatto che il pulsante d'acquisto resta quasi sempre nel
+    /// codice anche quando non si può comprare.
+    private func leggiPagina(_ t: MonitorTarget, _ dati: Data) throws -> [MonitorItem] {
+        let dentro = t.elencoMarcatoriDisponibile
+        let fuori = t.elencoMarcatoriEsaurito
+        guard !dentro.isEmpty || !fuori.isEmpty else {
+            throw NSError(domain: "monitor", code: 4, userInfo: [NSLocalizedDescriptionKey:
+                "Per una pagina serve almeno un marcatore, di disponibile o di esaurito."])
+        }
+        let corpo = String(data: dati, encoding: .utf8)
+            ?? String(decoding: dati, as: UTF8.self)
+
+        var disponibile: Bool
+        if !fuori.isEmpty, trovato(fuori, in: corpo, regex: t.regex) {
+            disponibile = false
+        } else if !dentro.isEmpty {
+            disponibile = trovato(dentro, in: corpo, regex: t.regex)
+        } else {
+            // Solo marcatori di esaurito, e nessuno trovato: si assume ci sia.
+            disponibile = true
+        }
+
+        return [MonitorItem(chiave: "pagina", titolo: t.nome,
+                            disponibile: disponibile, url: t.url, prezzo: nil)]
+    }
+
+    private func trovato(_ marcatori: [String], in corpo: String, regex: Bool) -> Bool {
+        for m in marcatori {
+            if regex {
+                if let r = try? NSRegularExpression(pattern: m, options: [.caseInsensitive, .dotMatchesLineSeparators]) {
+                    let campo = NSRange(corpo.startIndex..., in: corpo)
+                    if r.firstMatch(in: corpo, range: campo) != nil { return true }
+                }
+            } else if corpo.range(of: m, options: .caseInsensitive) != nil {
+                return true
+            }
+        }
+        return false
+    }
+
+    // MARK: - JSON qualsiasi, per percorsi
+
+    private func leggiJson(_ t: MonitorTarget, _ dati: Data) throws -> [MonitorItem] {
+        guard !t.percorsoDisponibile.isEmpty else {
+            throw NSError(domain: "monitor", code: 5, userInfo: [NSLocalizedDescriptionKey:
+                "Per una risposta JSON serve il percorso del campo di disponibilità."])
+        }
+        let radice = try JSONSerialization.jsonObject(with: dati)
+        let grezzi = scava(radice, t.percorsoElenco)
+
+        var elenco: [Any] = []
+        if let a = grezzi as? [Any] { elenco = a }
+        else if let d = grezzi as? [String: Any] { elenco = [d] }
+        else {
+            throw NSError(domain: "monitor", code: 6, userInfo: [NSLocalizedDescriptionKey:
+                "Il percorso \"\(t.percorsoElenco)\" non porta a un elenco."])
+        }
+
+        var out: [MonitorItem] = []
+        for (i, grezzo) in elenco.enumerated() {
+            let titolo = testo(scava(grezzo, t.percorsoTitolo)) ?? "articolo-\(i)"
+            guard passaFiltro(titolo, t) else { continue }
+            let chiave = testo(scava(grezzo, t.percorsoChiave)) ?? "\(i)"
+            let indirizzo = t.percorsoUrl.isEmpty ? t.url : (testo(scava(grezzo, t.percorsoUrl)) ?? t.url)
+            out.append(MonitorItem(chiave: chiave, titolo: titolo,
+                                   disponibile: vero(scava(grezzo, t.percorsoDisponibile)),
+                                   url: indirizzo, prezzo: nil))
+        }
+        return out
+    }
+
+    /// Naviga il JSON con un percorso puntato, `a.b.0.c`, come fa il desktop.
+    private func scava(_ dato: Any, _ percorso: String) -> Any? {
+        guard !percorso.isEmpty else { return dato }
+        var corrente: Any? = dato
+        for pezzo in percorso.split(separator: ".") {
+            if let array = corrente as? [Any] {
+                guard let i = Int(pezzo), i >= 0, i < array.count else { return nil }
+                corrente = array[i]
+            } else if let dizionario = corrente as? [String: Any] {
+                corrente = dizionario[String(pezzo)]
+            } else {
+                return nil
+            }
+            if corrente == nil { return nil }
+        }
+        return corrente
+    }
+
+    private func testo(_ v: Any?) -> String? {
+        switch v {
+        case let s as String: return s
+        case let n as NSNumber: return n.stringValue
+        case .none: return nil
+        default: return String(describing: v!)
+        }
+    }
+
+    private func vero(_ v: Any?) -> Bool {
+        switch v {
+        case let b as Bool: return b
+        case let n as NSNumber: return n.boolValue
+        case let s as String: return ["true", "1", "si", "yes", "instock", "available"]
+            .contains(s.lowercased())
+        default: return false
+        }
     }
 
     // MARK: - Notifiche

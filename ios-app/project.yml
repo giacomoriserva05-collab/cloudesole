@@ -30,6 +30,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.giacomoriserva.checkoutautofill
         INFOPLIST_FILE: CheckoutAutofill/Info.plist
+        CODE_SIGN_ENTITLEMENTS: CheckoutAutofill/CheckoutAutofill.entitlements
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_VERSION: "5.9"

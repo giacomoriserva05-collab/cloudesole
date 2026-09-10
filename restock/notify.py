@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 
+from .apns import ApnsClient, ApnsError
 from .models import Change
 
 log = logging.getLogger(__name__)
@@ -272,11 +273,56 @@ class DiscordNotifier(Notifier):
                 log.warning("Discord ha risposto %s: %s", response.status_code, response.text[:200])
 
 
+class ApnsNotifier(Notifier):
+    """Notifica sull'iPhone, anche ad app chiusa.
+
+    L'app su iOS non puo' interrogare i siti quando e' chiusa: il sistema la
+    sospende. Questo monitor invece gira di continuo, quindi e' lui a mandare
+    l'avviso. Toccandolo, l'app si apre sulla pagina del prodotto.
+    """
+
+    name = "apns"
+
+    def __init__(self, config: dict[str, Any]) -> None:
+        super().__init__(config)
+        self._client: ApnsClient | None = None
+
+    async def send(self, change: Change) -> None:
+        if self._client is None:
+            self._client = ApnsClient(self.config)
+
+        problema = self._client.manca()
+        if problema:
+            log.warning("APNs non configurato: %s", problema)
+            return
+
+        etichetta = "Restock" if change.kind == "restock" else "Nuovo"
+        titolo = f"{etichetta}: {change.target}"
+        corpo = change.item.title
+        if change.item.price:
+            corpo = f"{corpo} - {change.item.price}"
+
+        try:
+            riusciti, totali = await self._client.manda(titolo, corpo, change.item.url)
+        except ApnsError as exc:
+            log.warning("APNs: %s", exc)
+            return
+        except Exception as exc:  # pragma: no cover
+            log.warning("APNs: invio non riuscito: %s", exc)
+            return
+
+        if riusciti == 0:
+            log.warning("APNs: nessun telefono raggiunto su %d.", totali)
+        else:
+            log.info("APNs: avvisati %d telefoni su %d.", riusciti, totali)
+
+
 _REGISTRY: dict[str, type[Notifier]] = {
     "console": ConsoleNotifier,
     "desktop": DesktopNotifier,
     "telegram": TelegramNotifier,
     "discord": DiscordNotifier,
+    "apns": ApnsNotifier,
 }
 
 

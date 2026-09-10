@@ -285,13 +285,20 @@ struct MonitorTarget: Codable, Identifiable, Equatable {
     enum Tipo: String, Codable, CaseIterable {
         case prodotto = "shopify_product"
         case collezione = "shopify_collection"
+        case pagina = "html"
+        case json = "json"
 
         var descrizione: String {
             switch self {
             case .prodotto: return "Prodotto Shopify"
             case .collezione: return "Collezione Shopify"
+            case .pagina: return "Pagina qualsiasi (marcatori)"
+            case .json: return "Risposta JSON (percorsi)"
             }
         }
+
+        /// I due Shopify sanno da soli dove guardare; gli altri no.
+        var vaConfigurato: Bool { self == .pagina || self == .json }
     }
 
     var id: String = UUID().uuidString
@@ -301,6 +308,31 @@ struct MonitorTarget: Codable, Identifiable, Equatable {
     var intervallo: Double = 20        // secondi fra un controllo e il successivo
     var taglie: String = ""            // "42, 42.5, M" — vuoto vuol dire tutte
     var attivo: Bool = true
+
+    // --- tipo "pagina": si guarda cosa c'è scritto nel testo della pagina ---
+    /// Frasi che dicono "c'è", una per riga.
+    var marcatoriDisponibile: String = ""
+    /// Frasi che dicono "non c'è". Hanno la precedenza: il pulsante "aggiungi
+    /// al carrello" resta spesso nel codice anche a prodotto esaurito.
+    var marcatoriEsaurito: String = ""
+    /// Trattare i marcatori come espressioni regolari invece che come testo.
+    var regex: Bool = false
+
+    // --- tipo "json": percorsi puntati dentro la risposta, es. "data.items" ---
+    var percorsoElenco: String = ""
+    var percorsoDisponibile: String = ""
+    var percorsoChiave: String = "id"
+    var percorsoTitolo: String = "title"
+    var percorsoUrl: String = ""
+
+    var elencoMarcatoriDisponibile: [String] { Self.righe(marcatoriDisponibile) }
+    var elencoMarcatoriEsaurito: [String] { Self.righe(marcatoriEsaurito) }
+
+    private static func righe(_ s: String) -> [String] {
+        s.split(whereSeparator: { $0.isNewline })
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
 
     /// Le taglie scritte a mano, ripulite. Vuoto = nessun filtro.
     var elencoTaglie: [String] {

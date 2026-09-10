@@ -7,13 +7,16 @@ struct MonitorView: View {
     @EnvironmentObject var store: Store
     @EnvironmentObject var monitor: MonitorEngine
     @EnvironmentObject var web: WebController
+    @EnvironmentObject var push: PushRegistrar
     @State private var mostraNuovo = false
+    @State private var copiato = false
     @State private var daModificare: MonitorTarget?
 
     var body: some View {
         NavigationStack {
             List {
                 sezioneComandi
+                sezioneTelefono
                 sezioneAvvisi
                 sezioneTarget
                 sezioneRegistro
@@ -74,6 +77,46 @@ struct MonitorView: View {
              + "in pochi secondi e nessuna app può interrogare un sito ogni venti "
              + "secondi in sottofondo. Per la sorveglianza continua resta il "
              + "monitor sul computer."
+    }
+
+    // MARK: - Notifiche ad app chiusa
+
+    /// Il token è l'indirizzo del telefono per le notifiche. Copiandolo nella
+    /// configurazione del monitor sul computer, quello può svegliarti anche
+    /// con l'app chiusa — cosa che l'app da sola non può fare.
+    private var sezioneTelefono: some View {
+        Section {
+            if let t = push.token {
+                Button {
+                    UIPasteboard.general.string = t
+                    copiato = true
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(copiato ? "Copiato" : "Copia il codice del telefono")
+                                .foregroundStyle(copiato ? Color.green : Color.accentColor)
+                            Text(t).font(.caption2.monospaced())
+                                .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        }
+                        Spacer()
+                        Image(systemName: copiato ? "checkmark" : "doc.on.doc")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else if let e = push.errore {
+                Label(e, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+            } else {
+                Label("Registrazione in corso…", systemImage: "antenna.radiowaves.left.and.right")
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Notifiche ad app chiusa")
+        } footer: {
+            Text("Incolla questo codice nella configurazione del monitor sul computer, "
+                 + "alla voce dei dispositivi. Da lì in poi è il computer ad avvisarti, "
+                 + "anche con l'app chiusa e ovunque tu sia — a patto che il computer "
+                 + "sia acceso e il monitor in funzione.")
+        }
     }
 
     // MARK: - Avvisi
@@ -200,6 +243,68 @@ struct TargetView: View {
         !target.url.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    private var aiutoIndirizzo: String {
+        switch target.tipo {
+        case .prodotto:
+            return "L'indirizzo della scheda prodotto, quello con /products/ dentro. "
+                 + "L'endpoint JSON lo ricava l'app."
+        case .collezione:
+            return "L'indirizzo della collezione, quello con /collections/ dentro."
+        case .pagina:
+            return "L'indirizzo della pagina, qualunque negozio sia. Viene letta com'è, "
+                 + "compresa la parte dopo il punto interrogativo."
+        case .json:
+            return "L'indirizzo che risponde in JSON: l'endpoint del negozio, non la pagina."
+        }
+    }
+
+    /// Il tipo che funziona ovunque: si dice all'app cosa cercare nel testo.
+    private var sezionePagina: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Se c'è, la pagina dice").font(.caption).foregroundStyle(.secondary)
+                TextEditor(text: $target.marcatoriDisponibile)
+                    .frame(height: 62)
+                    .font(.callout.monospaced())
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Se è esaurito, dice").font(.caption).foregroundStyle(.secondary)
+                TextEditor(text: $target.marcatoriEsaurito)
+                    .frame(height: 62)
+                    .font(.callout.monospaced())
+            }
+            Toggle("Espressioni regolari", isOn: $target.regex)
+        } header: {
+            Text("Marcatori")
+        } footer: {
+            Text("Una frase per riga, per esempio «Aggiungi al carrello» sopra e "
+                 + "«Esaurito» sotto. **L'esaurito vince sempre**: il pulsante d'acquisto "
+                 + "resta quasi sempre nel codice della pagina anche quando non si può "
+                 + "comprare, quindi da solo non basta a dire che c'è.")
+        }
+    }
+
+    /// Per gli endpoint che rispondono in JSON ma non sono Shopify.
+    private var sezioneJson: some View {
+        Section {
+            TextField("Percorso dell'elenco (es. data.items)", text: $target.percorsoElenco)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+            TextField("Percorso della disponibilità", text: $target.percorsoDisponibile)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+            TextField("Percorso della chiave", text: $target.percorsoChiave)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+            TextField("Percorso del titolo", text: $target.percorsoTitolo)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+            TextField("Percorso dell'indirizzo (facoltativo)", text: $target.percorsoUrl)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+        } header: {
+            Text("Percorsi")
+        } footer: {
+            Text("Percorsi puntati dentro la risposta, come sul monitor del computer: "
+                 + "`a.b.0.c`. Lascia vuoto l'elenco se la risposta è già una lista.")
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -215,10 +320,11 @@ struct TargetView: View {
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
                 } footer: {
-                    Text(target.tipo == .prodotto
-                         ? "L'indirizzo della scheda prodotto, quello con /products/ dentro. L'endpoint JSON lo ricava l'app."
-                         : "L'indirizzo della collezione, quello con /collections/ dentro.")
+                    Text(aiutoIndirizzo)
                 }
+
+                if target.tipo == .pagina { sezionePagina }
+                if target.tipo == .json { sezioneJson }
 
                 Section {
                     Stepper("Ogni \(Int(target.intervallo)) secondi",

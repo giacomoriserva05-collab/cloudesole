@@ -5,6 +5,9 @@ struct CheckoutAutofillApp: App {
     @StateObject private var store: Store
     @StateObject private var web: WebController
     @StateObject private var monitor: MonitorEngine
+    // Se il delegato e' un ObservableObject, SwiftUI lo mette da se'
+    // nell'ambiente: la scheda Monitor puo' leggerne il token.
+    @UIApplicationDelegateAdaptor(PushRegistrar.self) private var push
 
     init() {
         let s = Store()
@@ -29,6 +32,7 @@ struct CheckoutAutofillApp: App {
                 .environmentObject(store)
                 .environmentObject(web)
                 .environmentObject(monitor)
+                .environmentObject(push)
         }
     }
 }
