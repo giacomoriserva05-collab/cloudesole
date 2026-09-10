@@ -15,25 +15,24 @@ struct BrowserView: View {
             testata
             Divider()
 
-            // Elenco e pagina restano **tutti e due montati**, e si alternano
-            // per trasparenza. Toglierli e rimetterli nell'albero delle viste
-            // faceva crollare UIKit: il cambio avveniva dentro la gestione del
-            // tocco che l'aveva provocato, e i riconoscitori di gesti della
-            // WKWebView si ritrovavano a metà strada
-            // (-[UIGestureRecognizer _delayTouchesForEvent:], oggetto nullo).
+            // Una sola delle due alla volta. Tenerle montate entrambe voleva
+            // dire lasciare la griglia — che è una vista a scorrimento —
+            // invisibile sopra la pagina web: due viste a scorrimento
+            // sovrapposte sono proprio il terreno del crollo nei gesti.
+            //
+            // A proteggere è l'altra metà: il cambio di stato avviene sempre
+            // al giro successivo del ciclo principale, mai dentro la
+            // consegna del tocco che l'ha provocato.
             ZStack(alignment: .bottom) {
-                WebView(webView: web.webView)
-                    .opacity(web.mostraElenco ? 0 : 1)
-                    .allowsHitTesting(!web.mostraElenco)
+                if web.mostraElenco {
+                    ShopsView().background(Color(.systemBackground))
+                } else {
+                    WebView(webView: web.webView)
+                }
 
-                ShopsView()
-                    .background(Color(.systemBackground))
-                    .opacity(web.mostraElenco ? 1 : 0)
-                    .allowsHitTesting(web.mostraElenco)
-
-                // Anche l'avviso resta montato. Comparire e sparire mentre
-                // il pilota lavora significherebbe cambiare l'albero mentre
-                // hai il dito sulla pagina: e' la stessa trappola di prima.
+                // L'avviso invece resta sempre montato: compare mentre il
+                // pilota lavora, cioè mentre hai il dito sulla pagina. E non
+                // intercetta i tocchi.
                 riquadro
             }
 
@@ -100,7 +99,10 @@ struct BrowserView: View {
 
     private var barraStrumenti: some View {
         HStack(spacing: 16) {
-            Button { web.mostraElenco = true } label: { Image(systemName: "square.grid.2x2") }
+            Button {
+                // Fuori dal tocco, come l'andata.
+                DispatchQueue.main.async { web.mostraElenco = true }
+            } label: { Image(systemName: "square.grid.2x2") }
                 .disabled(web.mostraElenco)
             Button { web.indietro() } label: { Image(systemName: "chevron.left") }
                 .disabled(!web.canGoBack || web.mostraElenco)

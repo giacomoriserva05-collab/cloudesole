@@ -10,6 +10,9 @@ struct CheckoutAutofillApp: App {
     @UIApplicationDelegateAdaptor(PushRegistrar.self) private var push
 
     init() {
+        // Per primo: se qualcosa cade, dev'esserci già chi prende nota.
+        RegistroCrash.installa()
+
         let s = Store()
         let w = WebController(store: s)
         let m = MonitorEngine()

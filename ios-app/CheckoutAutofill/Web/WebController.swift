@@ -46,7 +46,10 @@ final class WebController: NSObject, ObservableObject {
         webView = WKWebView(frame: .zero, configuration: config)
         super.init()
 
-        webView.allowsBackForwardNavigationGestures = true
+        // Niente scorrimento laterale per tornare indietro: installa
+        // riconoscitori di gesti pensati per un controller di navigazione,
+        // che qui non c'è. Avanti e indietro stanno nella barra in basso.
+        webView.allowsBackForwardNavigationGestures = false
         webView.navigationDelegate = self
         config.userContentController.add(self, contentWorld: mondo, name: "autofill")
         ricaricaScript()

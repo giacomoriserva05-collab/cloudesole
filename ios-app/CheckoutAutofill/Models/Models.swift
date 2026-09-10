@@ -287,6 +287,7 @@ struct MonitorTarget: Codable, Identifiable, Equatable {
         case collezione = "shopify_collection"
         case pagina = "html"
         case json = "json"
+        case elenco = "links"
 
         var descrizione: String {
             switch self {
@@ -294,11 +295,12 @@ struct MonitorTarget: Codable, Identifiable, Equatable {
             case .collezione: return "Collezione Shopify"
             case .pagina: return "Pagina qualsiasi (marcatori)"
             case .json: return "Risposta JSON (percorsi)"
+            case .elenco: return "Elenco di prodotti (link)"
             }
         }
 
         /// I due Shopify sanno da soli dove guardare; gli altri no.
-        var vaConfigurato: Bool { self == .pagina || self == .json }
+        var vaConfigurato: Bool { self != .prodotto && self != .collezione }
     }
 
     var id: String = UUID().uuidString
@@ -324,6 +326,26 @@ struct MonitorTarget: Codable, Identifiable, Equatable {
     var percorsoChiave: String = "id"
     var percorsoTitolo: String = "title"
     var percorsoUrl: String = ""
+
+    // --- tipo "elenco": si pescano i link dei prodotti da una pagina ---
+    /// Espressione regolare che riconosce una voce. Il primo gruppo fra
+    /// parentesi è il valore tenuto: di norma l'identificatore del prodotto.
+    var schema: String = "/products/([A-Za-z0-9._-]{2,90})"
+    /// Anteposto al valore per ricostruire l'indirizzo completo.
+    var base: String = ""
+    /// Parole che la voce deve contenere, separate da virgola. Vuoto: tutte.
+    var soloSe: String = ""
+    /// Parole che la escludono.
+    var tranneSe: String = ""
+
+    var elencoSoloSe: [String] { Self.parole(soloSe) }
+    var elencoTranneSe: [String] { Self.parole(tranneSe) }
+
+    private static func parole(_ s: String) -> [String] {
+        s.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+            .filter { !$0.isEmpty }
+    }
 
     var elencoMarcatoriDisponibile: [String] { Self.righe(marcatoriDisponibile) }
     var elencoMarcatoriEsaurito: [String] { Self.righe(marcatoriEsaurito) }

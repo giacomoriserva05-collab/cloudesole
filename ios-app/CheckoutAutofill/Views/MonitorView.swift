@@ -255,6 +255,9 @@ struct TargetView: View {
                  + "compresa la parte dopo il punto interrogativo."
         case .json:
             return "L'indirizzo che risponde in JSON: l'endpoint del negozio, non la pagina."
+        case .elenco:
+            return "L'indirizzo dell'elenco: una collezione, la pagina dei lanci, una mappa "
+                 + "del sito. Serve dove la disponibilità non si legge ma i prodotti sì."
         }
     }
 
@@ -281,6 +284,28 @@ struct TargetView: View {
                  + "«Esaurito» sotto. **L'esaurito vince sempre**: il pulsante d'acquisto "
                  + "resta quasi sempre nel codice della pagina anche quando non si può "
                  + "comprare, quindi da solo non basta a dire che c'è.")
+        }
+    }
+
+    /// Pesca i link dei prodotti da una pagina d'elenco.
+    private var sezioneElenco: some View {
+        Section {
+            TextField("Schema dei link", text: $target.schema)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+                .font(.callout.monospaced())
+            TextField("Inizio dell'indirizzo", text: $target.base)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+            TextField("Solo se contiene (facoltativo)", text: $target.soloSe)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+            TextField("Tranne se contiene (facoltativo)", text: $target.tranneSe)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+        } header: {
+            Text("Link")
+        } footer: {
+            Text("Lo schema è un'espressione regolare: il pezzo fra parentesi è quello "
+                 + "tenuto. Quello predefinito prende gli identificatori dei prodotti "
+                 + "Shopify. **Qui ogni voce vale come disponibile**: il segnale è la "
+                 + "comparsa di un prodotto che prima non c'era, non il ritorno in stock.")
         }
     }
 
@@ -325,6 +350,7 @@ struct TargetView: View {
 
                 if target.tipo == .pagina { sezionePagina }
                 if target.tipo == .json { sezioneJson }
+                if target.tipo == .elenco { sezioneElenco }
 
                 Section {
                     Stepper("Ogni \(Int(target.intervallo)) secondi",

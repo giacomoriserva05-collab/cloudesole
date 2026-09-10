@@ -156,8 +156,9 @@ final class MonitorEngine: NSObject, ObservableObject {
         }
         var richiesta = URLRequest(url: url)
         richiesta.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        richiesta.setValue(t.tipo == .pagina ? "text/html,application/xhtml+xml" : "application/json",
-                           forHTTPHeaderField: "Accept")
+        let accetta = (t.tipo == .pagina || t.tipo == .elenco)
+            ? "text/html,application/xhtml+xml" : "application/json"
+        richiesta.setValue(accetta, forHTTPHeaderField: "Accept")
         richiesta.timeoutInterval = 15
         richiesta.cachePolicy = .reloadIgnoringLocalCacheData
 
@@ -172,6 +173,7 @@ final class MonitorEngine: NSObject, ObservableObject {
         case .collezione: return try leggiCollezione(t, dati)
         case .pagina: return try leggiPagina(t, dati)
         case .json: return try leggiJson(t, dati)
+        case .elenco: return try leggiElenco(t, dati)
         }
     }
 
@@ -182,7 +184,7 @@ final class MonitorEngine: NSObject, ObservableObject {
         while s.hasSuffix("/") { s.removeLast() }
         // Per pagina e json l'indirizzo è già quello giusto: lo si interroga
         // com'è, compresa la stringa di ricerca, che spesso conta.
-        if t.tipo == .pagina || t.tipo == .json {
+        if t.tipo == .pagina || t.tipo == .json || t.tipo == .elenco {
             return t.url.trimmingCharacters(in: .whitespaces)
         }
         if s.hasSuffix(".js") || s.hasSuffix(".json") { return s }
@@ -294,6 +296,56 @@ final class MonitorEngine: NSObject, ObservableObject {
             }
         }
         return false
+    }
+
+    // MARK: - Elenco di prodotti
+
+    /// Pesca dalla pagina i link dei prodotti. Qui **ogni voce trovata conta
+    /// come disponibile**: il segnale utile non è il passaggio da esaurito a
+    /// disponibile, ma la *comparsa* di una voce che prima non c'era.
+    ///
+    /// Serve dove la disponibilità non è leggibile ma l'elenco sì — Supreme è
+    /// il caso da manuale: chiude gli endpoint JSON con un 403 e non scrive
+    /// nulla sullo stock nel codice della pagina, ma i link dei prodotti nella
+    /// collezione ci sono tutti.
+    private func leggiElenco(_ t: MonitorTarget, _ dati: Data) throws -> [MonitorItem] {
+        let schema = t.schema.trimmingCharacters(in: .whitespaces)
+        guard !schema.isEmpty else {
+            throw NSError(domain: "monitor", code: 7, userInfo: [NSLocalizedDescriptionKey:
+                "Per un elenco serve lo schema che riconosce i link."])
+        }
+        guard let regola = try? NSRegularExpression(pattern: schema, options: [.caseInsensitive]) else {
+            throw NSError(domain: "monitor", code: 8, userInfo: [NSLocalizedDescriptionKey:
+                "Lo schema non è un'espressione regolare valida."])
+        }
+        let corpo = String(data: dati, encoding: .utf8) ?? String(decoding: dati, as: UTF8.self)
+        let campo = NSRange(corpo.startIndex..., in: corpo)
+
+        let soloSe = t.elencoSoloSe
+        let tranneSe = t.elencoTranneSe
+        var viste = Set<String>()
+        var out: [MonitorItem] = []
+
+        for m in regola.matches(in: corpo, range: campo) {
+            // Col gruppo fra parentesi si tiene quello; senza, tutto il pezzo.
+            let quale = m.numberOfRanges > 1 ? 1 : 0
+            guard let r = Range(m.range(at: quale), in: corpo) else { continue }
+            let valore = String(corpo[r]).trimmingCharacters(in: .whitespaces)
+            guard !valore.isEmpty, !viste.contains(valore) else { continue }
+
+            let minuscolo = valore.lowercased()
+            if !soloSe.isEmpty && !soloSe.contains(where: { minuscolo.contains($0) }) { continue }
+            if tranneSe.contains(where: { minuscolo.contains($0) }) { continue }
+
+            viste.insert(valore)
+            let indirizzo = t.base.isEmpty
+                ? (valore.hasPrefix("http") ? valore : origine(t.url) + valore)
+                : t.base + valore
+            out.append(MonitorItem(chiave: valore, titolo: valore,
+                                   disponibile: true, url: indirizzo, prezzo: nil))
+            if out.count >= 3000 { break }   // pagine enormi: si mette un tetto
+        }
+        return out
     }
 
     // MARK: - JSON qualsiasi, per percorsi

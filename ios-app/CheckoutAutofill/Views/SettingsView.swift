@@ -58,6 +58,30 @@ struct SettingsView: View {
                     }
                 }
 
+                if let crash = RegistroCrash.ultimo {
+                    Section {
+                        Text(crash.quando, style: .date) + Text(" ") + Text(crash.quando, style: .time)
+                        Text(crash.testo)
+                            .font(.caption2.monospaced())
+                            .lineLimit(10)
+                        Button {
+                            UIPasteboard.general.string = crash.testo
+                        } label: {
+                            Label("Copia il motivo", systemImage: "doc.on.doc")
+                        }
+                        Button(role: .destructive) {
+                            RegistroCrash.dimentica()
+                        } label: {
+                            Label("Dimentica", systemImage: "trash")
+                        }
+                    } header: {
+                        Text("Ultimo crollo")
+                    } footer: {
+                        Text("L'app ha preso nota da sé dell'ultima caduta. Copia questo "
+                             + "testo e mandalo: dice dove guardare.")
+                    }
+                }
+
                 Section {
                     Text("Il pilota agisce solo dentro il browser di questa app. Su iOS "
                          + "nessuna applicazione può intervenire sulle pagine aperte in "
