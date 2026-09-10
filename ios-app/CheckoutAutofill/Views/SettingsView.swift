@@ -45,6 +45,14 @@ struct SettingsView: View {
                                 .lineLimit(1)
                         }
                     }
+                    NavigationLink { AccountsView() } label: {
+                        HStack {
+                            Label("Account dei negozi", systemImage: "key")
+                            Spacer()
+                            Text(store.accounts.isEmpty ? "nessuno" : "\(store.accounts.count)")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     NavigationLink { DiagnosticsView() } label: {
                         Label("Prova il pilota su questa pagina", systemImage: "stethoscope")
                     }

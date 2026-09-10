@@ -20,6 +20,10 @@ final class WebController: NSObject, ObservableObject {
     /// pagina. È lo stato in cui l'app si apre.
     @Published var mostraElenco = true
 
+    /// Vero quando in pagina c'è un modulo di accesso: è ciò che fa comparire
+    /// la chiave nella barra.
+    @Published var moduloAccesso = false
+
     struct Banner: Identifiable, Equatable {
         let id = UUID()
         var text: String
@@ -80,7 +84,7 @@ final class WebController: NSObject, ObservableObject {
                                        injectionTime: .atDocumentStart,
                                        forMainFrameOnly: true,
                                        in: mondo))
-        for nome in ["cartcore", "shopify", "filler", "bridge"] {
+        for nome in ["cartcore", "shopify", "filler", "login", "bridge"] {
             ucc.addUserScript(WKUserScript(source: sorgente(nome),
                                            injectionTime: .atDocumentEnd,
                                            forMainFrameOnly: true,
@@ -162,6 +166,54 @@ final class WebController: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Accesso ai siti
+
+    /// Le stringhe non si incollano nel JavaScript a mano: una password con
+    /// un apice o una barra rovescia romperebbe la chiamata, o peggio.
+    private func letterale(_ s: String) -> String {
+        guard let d = try? JSONSerialization.data(withJSONObject: [s]),
+              let t = String(data: d, encoding: .utf8) else { return "\"\"" }
+        return String(t.dropFirst().dropLast())
+    }
+
+    /// Guarda se la pagina ha un modulo di accesso da compilare.
+    func controllaModuloAccesso() {
+        let js = "JSON.stringify(window.LoginEngine ? window.LoginEngine.guarda() : null)"
+        webView.evaluateJavaScript(js, in: nil, in: mondo) { [weak self] esito in
+            guard case .success(let valore) = esito,
+                  let testo = valore as? String,
+                  let data = testo.data(using: .utf8),
+                  let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                self?.moduloAccesso = false
+                return
+            }
+            self?.moduloAccesso = (o["presente"] as? Bool) ?? false
+        }
+    }
+
+    /// Compila l'accesso. La password si rilegge adesso dal portachiavi, e il
+    /// telefono chiede Face ID: se rifiuti, non succede niente. Il modulo non
+    /// viene inviato — "Accedi" lo premi tu.
+    func accedi(con voce: SiteAccount, store: Store) {
+        guard let segreto = store.password(per: voce) else {
+            mostra("Accesso annullato.", tono: "warn")
+            return
+        }
+        let js = "JSON.stringify(window.LoginEngine ? window.LoginEngine.compila("
+            + letterale(voce.utente) + ", " + letterale(segreto) + ") : null)"
+        webView.evaluateJavaScript(js, in: nil, in: mondo) { [weak self] esito in
+            guard case .success(let valore) = esito,
+                  let testo = valore as? String,
+                  let data = testo.data(using: .utf8),
+                  let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  (o["ok"] as? Bool) == true else {
+                self?.mostra("Qui non ho trovato un modulo di accesso da compilare.", tono: "warn")
+                return
+            }
+            self?.mostra("Credenziali inserite. Premi tu \"Accedi\".", tono: "ok")
+        }
+    }
+
     func mostra(_ testo: String, tono: String) {
         banner = Banner(text: testo, tone: tono)
         let mio = banner?.id
@@ -221,6 +273,7 @@ extension WebController: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         currentURL = webView.url
         pageTitle = webView.title ?? ""
+        controllaModuloAccesso()
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

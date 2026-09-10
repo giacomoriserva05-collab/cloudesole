@@ -255,3 +255,19 @@ enum NegoziPredefiniti {
         Shop(nome: "Size?", indirizzo: "https://www.size.co.uk")
     ]
 }
+
+// MARK: - Account dei siti
+
+/// Le credenziali di accesso a un negozio. **La password non è in questa
+/// struttura**: qui c'è solo il nome utente, e sta in UserDefaults con tutto
+/// il resto. La password vive nel portachiavi, sotto Face ID, e si rilegge
+/// solo al momento di scriverla nel modulo.
+struct SiteAccount: Codable, Identifiable, Equatable {
+    var id: String = UUID().uuidString
+    var host: String          // "www.endclothing.com"
+    var utente: String        // email o nome utente
+    var nota: String = ""
+
+    /// La chiave con cui la password è archiviata nel portachiavi.
+    var chiavePortachiavi: String { "account:" + id }
+}

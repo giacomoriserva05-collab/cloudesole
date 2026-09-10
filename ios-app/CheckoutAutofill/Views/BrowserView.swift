@@ -8,6 +8,7 @@ struct BrowserView: View {
     @EnvironmentObject var web: WebController
     @State private var indirizzo = ""
     @FocusState private var scriveIndirizzo: Bool
+    @State private var mostraNuovoAccount = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -28,6 +29,10 @@ struct BrowserView: View {
         }
         .onChange(of: web.currentURL) { nuovo in
             if !scriveIndirizzo { indirizzo = nuovo?.absoluteString ?? "" }
+        }
+        .sheet(isPresented: $mostraNuovoAccount) {
+            NuovoAccountView(hostSuggerito: web.host)
+                .environmentObject(store)
         }
     }
 
@@ -92,6 +97,22 @@ struct BrowserView: View {
                 .disabled(!web.canGoForward || web.mostraElenco)
             Button { web.ricarica() } label: { Image(systemName: "arrow.clockwise") }
                 .disabled(web.mostraElenco)
+
+            // Compare solo dove serve: quando la pagina ha un modulo di
+            // accesso. Se non hai ancora salvato l'account, lo chiede.
+            if web.moduloAccesso && !web.mostraElenco {
+                Button {
+                    if let voce = store.account(per: web.host) {
+                        web.accedi(con: voce, store: store)
+                    } else {
+                        mostraNuovoAccount = true
+                    }
+                } label: {
+                    Image(systemName: store.account(per: web.host) != nil
+                          ? "key.fill" : "key")
+                        .foregroundStyle(store.account(per: web.host) != nil ? Color.accentColor : Color.secondary)
+                }
+            }
 
             Spacer()
 

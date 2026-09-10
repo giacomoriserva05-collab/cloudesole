@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Moduli di accesso — banco di prova</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; max-width: 640px; margin: 24px auto; }
+    fieldset { margin-bottom: 18px; }
+    label { display: block; margin: 8px 0; }
+    input { width: 100%; padding: 6px; }
+  </style>
+</head>
+<body>
+  <h1>Moduli di accesso</h1>
+  <p>
+    Tre casi: un accesso vero, una registrazione (due password: non va toccata)
+    e una pagina senza accesso. In cima c'è una casella di ricerca, che non deve
+    mai essere scambiata per il campo utente. Esiti in <code>window.__prove()</code>.
+  </p>
+
+  <label>Cerca nel sito <input type="search" name="q" placeholder="Cerca"></label>
+
+  <fieldset id="accesso">
+    <legend>Accesso (END.-like)</legend>
+    <form>
+      <label>Indirizzo email <input type="email" name="email" autocomplete="username"></label>
+      <label>Password <input type="password" name="password" autocomplete="current-password"></label>
+      <button type="button">Accedi</button>
+    </form>
+  </fieldset>
+
+  <fieldset id="registrazione" hidden>
+    <legend>Registrazione</legend>
+    <form>
+      <label>Email <input type="email" name="reg_email"></label>
+      <label>Password <input type="password" name="reg_pw"></label>
+      <label>Conferma password <input type="password" name="reg_pw2"></label>
+    </form>
+  </fieldset>
+
+  <script src="/ios-app/CheckoutAutofill/Resources/login.js"></script>
+  <script>
+    const L = globalThis.LoginEngine;
+    const stato = () => {
+      const o = {};
+      for (const el of document.querySelectorAll('input')) o[el.name] = el.value;
+      return o;
+    };
+
+    window.__prove = () => {
+      const out = {};
+
+      // 1. accesso normale: deve riempire email e password, non la ricerca
+      out.guarda = L.guarda();
+      out.compila = L.compila('giacomo@example.com', 'segreto123');
+      out.campi = stato();
+
+      // 2. registrazione: due password, non si tocca
+      document.getElementById('accesso').remove();
+      document.getElementById('registrazione').hidden = false;
+      out.registrazione = { guarda: L.guarda(), compila: L.compila('x@y.z', 'abc') };
+      out.campiRegistrazione = stato();
+
+      // 3. nessun modulo di accesso
+      document.getElementById('registrazione').remove();
+      out.senzaAccesso = { guarda: L.guarda(), compila: L.compila('x@y.z', 'abc') };
+
+      return out;
+    };
+  </script>
+</body>
+</html>

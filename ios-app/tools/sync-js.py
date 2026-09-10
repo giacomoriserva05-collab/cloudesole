@@ -66,10 +66,12 @@ def main() -> None:
         (DST / nome).write_text(testo, encoding="utf-8", newline="\n")
         print(f"scritto {nome}  ({len(testo.splitlines())} righe)")
 
-    ponte = DST / "bridge.js"
-    if not ponte.exists():
-        sys.exit("manca bridge.js: è scritto a mano, non generato")
-    print(f"presente bridge.js ({len(ponte.read_text(encoding='utf-8').splitlines())} righe)")
+    # Scritti a mano, non generati: qui si controlla solo che ci siano.
+    for nome in ("bridge.js", "login.js"):
+        f = DST / nome
+        if not f.exists():
+            sys.exit(f"manca {nome}: è scritto a mano, non generato")
+        print(f"presente {nome} ({len(f.read_text(encoding='utf-8').splitlines())} righe)")
 
 
 if __name__ == "__main__":

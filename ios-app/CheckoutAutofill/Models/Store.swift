@@ -14,6 +14,10 @@ final class Store: ObservableObject {
     /// predefiniti; da lì in poi comanda l'utente.
     @Published var shops: [Shop] = [] { didSet { salva() } }
 
+    /// Gli account dei siti. Qui c'è solo il nome utente: la password sta nel
+    /// portachiavi, protetta dal riconoscimento del volto.
+    @Published var accounts: [SiteAccount] = [] { didSet { salva() } }
+
     /// Le carte, una per profilo. Se non le ricordi restano solo qui in
     /// memoria e spariscono chiudendo l'app.
     @Published private(set) var cards: [String: Card] = [:]
@@ -36,6 +40,8 @@ final class Store: ObservableObject {
         armed = ud.bool(forKey: "armed")
         shops = (ud.data(forKey: "shops").flatMap { try? dec.decode([Shop].self, from: $0) })
             ?? NegoziPredefiniti.all
+        accounts = (ud.data(forKey: "accounts").flatMap { try? dec.decode([SiteAccount].self, from: $0) })
+            ?? []
 
         if profiles.isEmpty { profiles = [Profile.principale()] }
         if !profiles.contains(where: { $0.id == activeID }) { activeID = profiles[0].id }
@@ -136,6 +142,51 @@ final class Store: ObservableObject {
         shops = NegoziPredefiniti.all
     }
 
+    // MARK: - Account dei siti
+
+    /// L'account per l'host aperto adesso, sottodomini compresi: salvato su
+    /// "endclothing.com" vale anche su "www.endclothing.com".
+    func account(per host: String) -> SiteAccount? {
+        guard !host.isEmpty else { return nil }
+        return accounts.first { host == $0.host || host.hasSuffix("." + $0.host) || $0.host.hasSuffix("." + host) }
+    }
+
+    @discardableResult
+    func salvaAccount(host: String, utente: String, password: String, nota: String = "") -> Bool {
+        let h = host.trimmingCharacters(in: .whitespaces).lowercased()
+            .replacingOccurrences(of: "https://", with: "")
+            .replacingOccurrences(of: "http://", with: "")
+            .split(separator: "/").first.map(String.init) ?? ""
+        let u = utente.trimmingCharacters(in: .whitespaces)
+        guard !h.isEmpty, !u.isEmpty else { return false }
+
+        var voce = accounts.first { $0.host == h } ?? SiteAccount(host: h, utente: u)
+        voce.utente = u
+        voce.nota = nota
+
+        if !password.isEmpty {
+            guard KeychainAccessi.salva(password, account: voce.chiavePortachiavi) else { return false }
+        }
+        if let i = accounts.firstIndex(where: { $0.id == voce.id }) {
+            accounts[i] = voce
+        } else {
+            accounts.append(voce)
+        }
+        return true
+    }
+
+    func rimuoviAccount(_ voce: SiteAccount) {
+        KeychainAccessi.elimina(account: voce.chiavePortachiavi)
+        accounts.removeAll { $0.id == voce.id }
+    }
+
+    /// Rilegge la password. È qui che il telefono chiede Face ID; se rifiuti,
+    /// torna nil e non succede niente.
+    func password(per voce: SiteAccount) -> String? {
+        KeychainAccessi.leggi(account: voce.chiavePortachiavi,
+                              motivo: "Compilare l'accesso a \(voce.host)")
+    }
+
     // MARK: - Regole per sito
 
     func site(for host: String) -> SiteConfig {
@@ -186,6 +237,7 @@ final class Store: ObservableObject {
         if let x = try? enc.encode(settings) { d.set(x, forKey: "settings") }
         if let x = try? enc.encode(sites) { d.set(x, forKey: "sites") }
         if let x = try? enc.encode(shops) { d.set(x, forKey: "shops") }
+        if let x = try? enc.encode(accounts) { d.set(x, forKey: "accounts") }
         d.set(activeID, forKey: "activeID")
         d.set(armed, forKey: "armed")
     }
