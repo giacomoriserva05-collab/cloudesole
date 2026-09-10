@@ -162,6 +162,31 @@ accorgano della modifica invece di riscrivere il campo vuoto al primo clic.
 Ricerca, codici sconto, quantità, newsletter, note, captcha, OTP e **qualsiasi
 campo password**, anche se il resto combacia. Non preme nessun pulsante.
 
+## La via veloce su Shopify
+
+Prima di leggere la pagina, il pilota prova la scorciatoia. Shopify espone gli
+stessi endpoint che il negozio usa da sé:
+
+    GET  /products/<handle>.js   varianti, taglie, disponibilità
+    POST /cart/add.js            aggiunta al carrello
+
+Due richieste e il carrello è pieno: niente attesa del rendering, niente
+pulsante da aspettare, niente selettore di taglie da interpretare. Sono
+esattamente le richieste che partono quando premi "aggiungi al carrello" —
+non si aggira nulla, si salta solo il giro dell'interfaccia.
+
+La scelta della variante usa **gli stessi alias delle taglie** del resto:
+`M` trova *Medium*, `XL` trova *XLarge*, `42,5` trova `42.5`. Le varianti con
+`available: false` vengono saltate, anche quando sono la taglia che hai chiesto.
+
+**Se qualcosa non torna, si torna alla via lenta.** Non è Shopify, l'endpoint
+risponde HTML (capita: Supreme chiude `products.json`), il carrello rifiuta con
+un 422 perché la taglia è finita nel frattempo: in tutti questi casi riparte il
+riconoscimento dal DOM, che continua a funzionare come prima. La scorciatoia è
+un'ottimizzazione, non una dipendenza.
+
+Si spegne dalle Opzioni, *"Su Shopify usa le richieste dirette"*.
+
 ## Come trova il pulsante e la taglia
 
 Tutto il riconoscimento sta in `cartcore.js`, usato sia dal pilota sia dalla

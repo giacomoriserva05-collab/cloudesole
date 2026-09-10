@@ -20,7 +20,8 @@ export const DEFAULT_SETTINGS = {
   highlight: true,        // bordo colorato sui campi toccati
   autoFillCheckout: true, // a estensione attiva, compila da sé arrivato al checkout
   cartWait: 1500,         // ms di attesa fra il clic e l'apertura della pagina
-  afterAdd: 'checkout'    // dopo l'aggiunta apre 'checkout' oppure 'cart'
+  afterAdd: 'checkout',   // dopo l'aggiunta apre 'checkout' oppure 'cart'
+  shopifyFast: true       // su Shopify va per richieste dirette, senza DOM
 };
 
 const CARD_FIELDS = Object.keys(EMPTY_CARD);

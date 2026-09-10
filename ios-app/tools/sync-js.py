@@ -21,10 +21,13 @@ HEADER = (
 )
 
 
-def copia_cartcore() -> str:
-    """cartcore.js è già uno script classico che si espone su globalThis."""
-    testo = (SRC / "cartcore.js").read_text(encoding="utf-8")
-    return HEADER.format(name="cartcore.js") + testo
+# Script classici che si espongono su globalThis: si copiano e basta.
+DIRETTI = ["cartcore.js", "shopify.js"]
+
+
+def copia(nome: str) -> str:
+    testo = (SRC / nome).read_text(encoding="utf-8")
+    return HEADER.format(name=nome) + testo
 
 
 def adatta_filler() -> str:
@@ -56,7 +59,8 @@ def controlla(testo: str, nome: str) -> None:
 
 def main() -> None:
     DST.mkdir(parents=True, exist_ok=True)
-    lavori = {"cartcore.js": copia_cartcore(), "filler.js": adatta_filler()}
+    lavori = {n: copia(n) for n in DIRETTI}
+    lavori["filler.js"] = adatta_filler()
     for nome, testo in lavori.items():
         controlla(testo, nome)
         (DST / nome).write_text(testo, encoding="utf-8", newline="\n")

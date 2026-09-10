@@ -82,8 +82,48 @@
 
   // ------------------------------------------------------ scheda prodotto
 
+  /** La via veloce: due richieste agli endpoint del negozio, niente pagina da
+   *  leggere. Se il negozio non è Shopify o non risponde, si torna al DOM. */
+  async function viaVeloce(st) {
+    if (st.settings.shopifyFast === false) return false;
+    const S = globalThis.ShopifyEngine;
+    if (!S) return false;
+
+    const r = await S.aggiungiTaglia(st.size);
+
+    if (r.status === 'ok' || r.status === 'primo') {
+      mark('add:');
+      const detta = r.status === 'ok'
+        ? 'taglia ' + r.label + ' aggiunta'
+        : 'aggiunta la prima taglia libera (' + r.label + ')';
+      C.toast(detta + ' senza aprire la pagina, apro il checkout…');
+      await sleep(Math.max(200, Number(st.settings.cartWait) || 800));
+      const meta = st.settings.afterAdd === 'cart'
+        ? C.cartUrl(st.site.cartUrl)
+        : C.checkoutUrl(st.site.checkoutUrl);
+      if (meta !== location.href) location.href = meta;
+      return true;
+    }
+
+    if (r.status === 'mancante') {
+      const lista = (r.disponibili || []).slice(0, 8).join(', ');
+      C.toast('taglia ' + st.size + ' non disponibile. Ci sono: ' + (lista || 'nessuna') + '.', 'err');
+      mark('add:');
+      return true;
+    }
+    if (r.status === 'esaurito') {
+      C.toast('tutte le taglie sono esaurite.', 'err');
+      mark('add:');
+      return true;
+    }
+
+    // 'nonShopify' o 'rifiutato': la via lenta può ancora farcela.
+    return false;
+  }
+
   async function handleProduct(st) {
     if (already('add:')) return;
+    if (await viaVeloce(st)) return;
 
     // Il pulsante può arrivare dopo. Si accettano anche quelli disabilitati:
     // diversi negozi li sbloccano solo dopo la scelta della taglia.

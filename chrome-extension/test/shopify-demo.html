@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Motore Shopify — banco di prova</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; max-width: 720px; margin: 24px auto; }
+    pre { background: #f4f4f5; padding: 12px; border-radius: 6px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>Motore Shopify</h1>
+  <p>
+    Le risposte del negozio sono finte: <code>fetch</code> è sostituito, così
+    si provano anche i casi che dal vivo non si riescono a riprodurre — taglia
+    esaurita fra il controllo e l'aggiunta, endpoint chiuso, carrello che
+    rifiuta. Gli esiti finiscono in <code>window.__prove()</code>.
+  </p>
+  <pre id="esito">in attesa…</pre>
+
+  <script src="../cartcore.js"></script>
+  <script src="../shopify.js"></script>
+  <script>
+    // Scheda prodotto come la restituisce Shopify: taglie per esteso e
+    // identificatori numerici di variante, come su Supreme.
+    const PRODOTTO = {
+      id: 900, title: "Hooded Varsity Jacket", handle: "giacca",
+      available: true,
+      options: [{ name: "Size", position: 1, values: ["Small", "Medium", "XLarge"] }],
+      variants: [
+        { id: 42727418626252, title: "Small",  available: false, option1: "Small",  public_title: "Small" },
+        { id: 42727428653260, title: "Medium", available: true,  option1: "Medium", public_title: "Medium" },
+        { id: 42727423246540, title: "XLarge", available: true,  option1: "XLarge", public_title: "XLarge" }
+      ]
+    };
+
+    // Registra ogni richiesta, così si verifica *cosa* è stato chiesto.
+    window.__richieste = [];
+
+    function fingiFetch({ prodotto = PRODOTTO, jsonProdotto = true, esitoAdd = 200 }) {
+      window.fetch = async (url, opzioni = {}) => {
+        window.__richieste.push({ url, metodo: opzioni.method || 'GET', corpo: opzioni.body });
+        if (String(url).includes('/products/')) {
+          if (!jsonProdotto) {
+            // È il caso Supreme: l'endpoint risponde con la pagina HTML.
+            return { ok: true, headers: { get: () => 'text/html' }, json: async () => ({}) };
+          }
+          if (!prodotto) return { ok: false, headers: { get: () => 'application/json' } };
+          return { ok: true, headers: { get: () => 'application/json' }, json: async () => prodotto };
+        }
+        if (String(url).includes('/cart/add.js')) {
+          if (esitoAdd === 200) return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ id: 1 }) };
+          return {
+            ok: false, status: esitoAdd, headers: { get: () => 'application/json' },
+            json: async () => ({ description: "L'articolo richiesto non è più disponibile." })
+          };
+        }
+        return { ok: false, headers: { get: () => 'text/html' } };
+      };
+    }
+
+    window.__prove = async () => {
+      const S = globalThis.ShopifyEngine;
+      const out = {};
+      history.pushState({}, '', '/products/giacca');
+
+      // 1. taglia M -> deve trovare "Medium" (alias) e chiedere il suo id
+      fingiFetch({});
+      window.__richieste = [];
+      out.tagliaM = await S.aggiungiTaglia('M');
+      const add = window.__richieste.find(r => r.url.includes('/cart/add.js'));
+      out.idChiesto = add ? JSON.parse(add.corpo).id : null;
+
+      // 2. nessuna taglia -> prima disponibile, saltando Small esaurita
+      fingiFetch({});
+      out.senzaTaglia = await S.aggiungiTaglia('');
+
+      // 3. taglia che non c'è -> si ferma ed elenca
+      fingiFetch({});
+      out.taglia44 = await S.aggiungiTaglia('44');
+
+      // 4. taglia presente ma esaurita -> non deve sceglierla
+      fingiFetch({});
+      out.tagliaSmallEsaurita = await S.aggiungiTaglia('S');
+
+      // 5. tutto esaurito
+      const finito = JSON.parse(JSON.stringify(PRODOTTO));
+      finito.variants.forEach(v => { v.available = false; });
+      fingiFetch({ prodotto: finito });
+      out.tuttoEsaurito = await S.aggiungiTaglia('M');
+
+      // 6. non è Shopify: l'endpoint risponde HTML
+      fingiFetch({ jsonProdotto: false });
+      out.nonShopify = await S.aggiungiTaglia('M');
+
+      // 7. il carrello rifiuta (finita fra controllo e aggiunta)
+      fingiFetch({ esitoAdd: 422 });
+      out.rifiutato = await S.aggiungiTaglia('M');
+
+      // 8. indirizzo che non è una scheda prodotto
+      history.pushState({}, '', '/collections/all');
+      fingiFetch({});
+      out.fuoriDaProdotto = await S.aggiungiTaglia('M');
+
+      document.getElementById('esito').textContent = JSON.stringify(out, null, 2);
+      return out;
+    };
+  </script>
+</body>
+</html>

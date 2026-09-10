@@ -4,7 +4,7 @@
 import { runFill } from './runner.js';
 
 const SCRIPT_ID = 'autopilot';
-const FILES = ['cartcore.js', 'autopilot.js'];
+const FILES = ['cartcore.js', 'shopify.js', 'autopilot.js'];
 
 async function badge(tabId, text, color) {
   try {

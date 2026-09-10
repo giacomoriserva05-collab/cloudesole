@@ -217,6 +217,7 @@ async function persist() {
   state.settings.splitHouseNumber = $('#opt-split').checked;
   state.settings.highlight = $('#opt-highlight').checked;
   state.settings.autoFillCheckout = $('#opt-autofill').checked;
+  state.settings.shopifyFast = $('#opt-shopify').checked;
   state.settings.afterAdd = $('#opt-after').value;
   const wait = parseInt($('#opt-wait').value, 10);
   state.settings.cartWait = Number.isFinite(wait) ? Math.min(15000, Math.max(300, wait)) : 1500;
@@ -642,6 +643,7 @@ async function init() {
   $('#opt-split').checked = !!state.settings.splitHouseNumber;
   $('#opt-highlight').checked = state.settings.highlight !== false;
   $('#opt-autofill').checked = state.settings.autoFillCheckout !== false;
+  $('#opt-shopify').checked = state.settings.shopifyFast !== false;
   $('#opt-wait').value = state.settings.cartWait || 1500;
   $('#opt-after').value = state.settings.afterAdd === 'cart' ? 'cart' : 'checkout';
   $('#card-wrap').classList.toggle('hidden', !state.settings.fillCard);

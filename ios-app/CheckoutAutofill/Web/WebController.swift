@@ -76,7 +76,7 @@ final class WebController: NSObject, ObservableObject {
                                        injectionTime: .atDocumentStart,
                                        forMainFrameOnly: true,
                                        in: mondo))
-        for nome in ["cartcore", "filler", "bridge"] {
+        for nome in ["cartcore", "shopify", "filler", "bridge"] {
             ucc.addUserScript(WKUserScript(source: sorgente(nome),
                                            injectionTime: .atDocumentEnd,
                                            forMainFrameOnly: true,

@@ -74,14 +74,25 @@ CheckoutAutofill/
     PaymentView.swift  carta
     SettingsView.swift opzioni, regole per sito, diagnostica
   Resources/
-    cartcore.js  filler.js   generati da sync-js.py
-    bridge.js                scritto a mano
+    cartcore.js  shopify.js  filler.js   generati da sync-js.py
+    bridge.js                            scritto a mano
 ```
 
 Gli script girano in un **mondo isolato** della WKWebView
 (`WKContentWorld.defaultClient`): vedono il DOM ma non le variabili della
 pagina, e — quel che conta — la pagina non vede i tuoi dati. È lo stesso
 confine che l'estensione ha su Chrome.
+
+## La via veloce su Shopify
+
+Il motore `shopify.js` è condiviso con l'estensione e fa la stessa cosa: due
+richieste agli endpoint del negozio invece di leggere la pagina.
+
+Su iOS c'è un motivo in più per tenerlo in JavaScript anziché in Swift: **il
+carrello di Shopify vive in un cookie**. Una richiesta fatta da `URLSession`
+finirebbe in un archivio di cookie separato da quello della `WKWebView`, e
+`/checkout` si aprirebbe vuoto. Partendo da dentro la pagina, il cookie è già
+quello giusto.
 
 ## Cosa cambia rispetto all'estensione
 

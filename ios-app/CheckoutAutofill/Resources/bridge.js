@@ -107,10 +107,52 @@
   const gia = (tag) => { try { return sessionStorage.getItem(PREFIX + tag + qui()) === '1'; } catch (e) { return false; } };
   const segna = (tag) => { try { sessionStorage.setItem(PREFIX + tag + qui(), '1'); } catch (e) { /* privata */ } };
 
+  /** Dove va dopo l'aggiunta: checkout o carrello. */
+  function destinazione(s, sito) {
+    return s.afterAdd === 'cart' ? C.cartUrl(sito.cartUrl) : C.checkoutUrl(sito.checkoutUrl);
+  }
+
+  /** La via veloce: due richieste agli endpoint del negozio, senza leggere la
+   *  pagina. Restituisce true se ha già deciso lei, false per ripiegare. */
+  async function viaVeloce(sito, s, taglia) {
+    if (s.shopifyFast === false) return false;
+    const S = globalThis.ShopifyEngine;
+    if (!S) return false;
+
+    const r = await S.aggiungiTaglia(taglia);
+
+    if (r.status === 'ok' || r.status === 'primo') {
+      segna('add:');
+      const detta = r.status === 'ok'
+        ? 'taglia ' + r.label + ' aggiunta'
+        : 'aggiunta la prima taglia libera (' + r.label + ')';
+      versoApp({ type: 'added', size: r.label || '', status: r.status, via: 'shopify' });
+      avviso(detta + ' senza aprire la pagina, apro il checkout…');
+      await sleep(Math.max(200, Number(s.cartWait) || 800));
+      const meta = destinazione(s, sito);
+      if (meta !== location.href) location.href = meta;
+      return true;
+    }
+    if (r.status === 'mancante') {
+      const lista = (r.disponibili || []).slice(0, 8).join(', ');
+      avviso('taglia ' + taglia + ' non disponibile. Ci sono: ' + (lista || 'nessuna') + '.', 'err');
+      segna('add:');
+      return true;
+    }
+    if (r.status === 'esaurito') {
+      avviso('tutte le taglie sono esaurite.', 'err');
+      segna('add:');
+      return true;
+    }
+    return false;   // 'nonShopify' o 'rifiutato': ci prova la via lenta
+  }
+
   async function suProdotto(sito) {
     if (gia('add:')) return;
     const s = (stato && stato.settings) || {};
     const taglia = (stato.profile && stato.profile.shipping && stato.profile.shipping.size) || '';
+
+    if (await viaVeloce(sito, s, taglia)) return;
 
     const partenza = location.href;
     let pulsanti = [];

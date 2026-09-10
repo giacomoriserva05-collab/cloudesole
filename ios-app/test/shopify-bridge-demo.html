@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Via veloce Shopify nel ponte iOS — banco di prova</title>
+  <style>body { font: 14px system-ui, sans-serif; max-width: 680px; margin: 24px auto; }</style>
+</head>
+<body>
+  <h1>Prodotto Shopify</h1>
+  <p>
+    La pagina ha un pulsante "aggiungi al carrello" e un selettore di taglie,
+    <strong>ma non devono essere toccati</strong>: con la via veloce il carrello
+    si riempie via richiesta e il DOM resta intatto. Se <code>window.__log</code>
+    resta vuoto, la scorciatoia ha funzionato.
+  </p>
+
+  <select name="size" aria-label="size">
+    <option value="1">Small</option>
+    <option value="2">Medium</option>
+  </select>
+  <button type="submit" name="remove" id="add">add to cart</button>
+
+  <script>
+    window.__log = { clicked: null, size: null };
+    document.getElementById('add').addEventListener('click', () => { window.__log.clicked = 'add to cart'; });
+    document.querySelector('select').addEventListener('change', (e) => {
+      window.__log.size = e.target.selectedOptions[0].textContent;
+    });
+
+    window.__CA_TEST = [];
+    window.__richieste = [];
+
+    const PRODOTTO = {
+      id: 900, title: "Giacca", handle: "giacca",
+      variants: [
+        { id: 111, title: "Small",  available: false, option1: "Small" },
+        { id: 222, title: "Medium", available: true,  option1: "Medium" },
+        { id: 333, title: "XLarge", available: true,  option1: "XLarge" }
+      ]
+    };
+
+    const q = new URLSearchParams(location.search);
+    // Con ?nonshopify l'endpoint risponde HTML: si deve ripiegare sul DOM.
+    const finge = q.has('nonshopify');
+
+    window.fetch = async (url, o = {}) => {
+      window.__richieste.push({ url: String(url), metodo: o.method || 'GET', corpo: o.body });
+      if (String(url).includes('/products/')) {
+        if (finge) return { ok: true, headers: { get: () => 'text/html' }, json: async () => ({}) };
+        return { ok: true, headers: { get: () => 'application/json' }, json: async () => PRODOTTO };
+      }
+      if (String(url).includes('/cart/add.js')) {
+        return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ id: 1 }) };
+      }
+      return { ok: false, headers: { get: () => 'text/html' } };
+    };
+
+    window.__CA_STATE = {
+      armed: true,
+      settings: {
+        autoFillCheckout: true, cartWait: 9000, afterAdd: 'checkout',
+        overwrite: false, highlight: true, fillCard: false,
+        shopifyFast: !q.has('lento')
+      },
+      sites: {},
+      profile: {
+        shipping: { firstName: 'Giacomo', size: q.get('size') === null ? 'M' : q.get('size') },
+        billing: { enabled: false }
+      },
+      card: null
+    };
+
+    // L'indirizzo deve sembrare una scheda prodotto Shopify prima che il
+    // ponte parta: gli script in linea girano in ordine, quindi qui va bene.
+    history.pushState({}, '', '/products/giacca' + location.search);
+  </script>
+  <script src="/ios-app/CheckoutAutofill/Resources/cartcore.js"></script>
+  <script src="/ios-app/CheckoutAutofill/Resources/shopify.js"></script>
+  <script src="/ios-app/CheckoutAutofill/Resources/filler.js"></script>
+  <script src="/ios-app/CheckoutAutofill/Resources/bridge.js"></script>
+</body>
+</html>
