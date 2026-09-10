@@ -176,7 +176,7 @@ class ApnsClient:
             # Un dispositivo che non esiste piu' va tolto, non ritentato.
             if motivo in {"BadDeviceToken", "Unregistered"}:
                 log.warning(
-                    "APNs: il codice %s… non e' piu' valido. Ricopialo dall'app.",
+                    "APNs: il codice %s... non e' piu' valido. Ricopialo dall'app.",
                     device[:12],
                 )
             elif motivo == "TopicDisallowed":

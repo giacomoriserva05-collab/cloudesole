@@ -1,3 +1,7 @@
+# Chiavi di firma Apple: la .p8 APNs e' una chiave privata. Fuori dal
+# repository, sempre.
+AuthKey_*.p8
+
 # Segreti: config.yaml contiene il token del bot Telegram.
 # Il modello senza credenziali è config.example.yaml, quello sì versionato.
 config.yaml
