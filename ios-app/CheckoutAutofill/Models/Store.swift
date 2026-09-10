@@ -18,6 +18,13 @@ final class Store: ObservableObject {
     /// portachiavi, protetta dal riconoscimento del volto.
     @Published var accounts: [SiteAccount] = [] { didSet { salva() } }
 
+    /// I target del monitor.
+    @Published var targets: [MonitorTarget] = [] { didSet { salva() } }
+
+    /// Quale scheda è in primo piano. Non si salva: serve a portare l'app sul
+    /// prodotto quando si tocca una notifica di restock.
+    @Published var schedaSelezionata = 0
+
     /// Le carte, una per profilo. Se non le ricordi restano solo qui in
     /// memoria e spariscono chiudendo l'app.
     @Published private(set) var cards: [String: Card] = [:]
@@ -41,6 +48,8 @@ final class Store: ObservableObject {
         shops = (ud.data(forKey: "shops").flatMap { try? dec.decode([Shop].self, from: $0) })
             ?? NegoziPredefiniti.all
         accounts = (ud.data(forKey: "accounts").flatMap { try? dec.decode([SiteAccount].self, from: $0) })
+            ?? []
+        targets = (ud.data(forKey: "targets").flatMap { try? dec.decode([MonitorTarget].self, from: $0) })
             ?? []
 
         if profiles.isEmpty { profiles = [Profile.principale()] }
@@ -142,6 +151,20 @@ final class Store: ObservableObject {
         shops = NegoziPredefiniti.all
     }
 
+    // MARK: - Monitor
+
+    func aggiungiTarget(_ t: MonitorTarget) {
+        targets.append(t)
+    }
+
+    func rimuoviTarget(_ t: MonitorTarget) {
+        targets.removeAll { $0.id == t.id }
+    }
+
+    func aggiornaTarget(_ t: MonitorTarget) {
+        if let i = targets.firstIndex(where: { $0.id == t.id }) { targets[i] = t }
+    }
+
     // MARK: - Account dei siti
 
     /// L'account per l'host aperto adesso, sottodomini compresi: salvato su
@@ -238,6 +261,7 @@ final class Store: ObservableObject {
         if let x = try? enc.encode(sites) { d.set(x, forKey: "sites") }
         if let x = try? enc.encode(shops) { d.set(x, forKey: "shops") }
         if let x = try? enc.encode(accounts) { d.set(x, forKey: "accounts") }
+        if let x = try? enc.encode(targets) { d.set(x, forKey: "targets") }
         d.set(activeID, forKey: "activeID")
         d.set(armed, forKey: "armed")
     }

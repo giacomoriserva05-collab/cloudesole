@@ -69,6 +69,10 @@ struct Settings: Codable, Equatable {
     var autoFillCheckout = true   // a pilota acceso, compila arrivato al checkout
     var cartWait = 1500           // ms fra il clic e il cambio pagina
     var afterAdd = "checkout"     // dopo l'aggiunta apre "checkout" o "cart"
+    var shopifyFast = true        // su Shopify va per richieste dirette
+    /// Con cosa il monitor si presenta ai siti. Un contatto vero è la cortesia
+    /// minima: se dai fastidio, il sito ha come scriverti invece che bloccarti.
+    var userAgent = "CloudeSole/1.0 (monitor personale di disponibilita')"
 }
 
 struct FieldRule: Codable, Identifiable, Equatable {
@@ -270,4 +274,74 @@ struct SiteAccount: Codable, Identifiable, Equatable {
 
     /// La chiave con cui la password è archiviata nel portachiavi.
     var chiavePortachiavi: String { "account:" + id }
+}
+
+// MARK: - Monitor
+
+/// Un target del monitor. Stessi campi del monitor desktop, ridotti ai due
+/// tipi Shopify: sono quelli che coprono la maggior parte dei drop e che si
+/// possono interrogare senza inventarsi selettori.
+struct MonitorTarget: Codable, Identifiable, Equatable {
+    enum Tipo: String, Codable, CaseIterable {
+        case prodotto = "shopify_product"
+        case collezione = "shopify_collection"
+
+        var descrizione: String {
+            switch self {
+            case .prodotto: return "Prodotto Shopify"
+            case .collezione: return "Collezione Shopify"
+            }
+        }
+    }
+
+    var id: String = UUID().uuidString
+    var nome: String
+    var tipo: Tipo = .prodotto
+    var url: String
+    var intervallo: Double = 20        // secondi fra un controllo e il successivo
+    var taglie: String = ""            // "42, 42.5, M" — vuoto vuol dire tutte
+    var attivo: Bool = true
+
+    /// Le taglie scritte a mano, ripulite. Vuoto = nessun filtro.
+    var elencoTaglie: [String] {
+        taglie.split(whereSeparator: { $0 == "," || $0 == " " })
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+}
+
+/// Un articolo visto durante un controllo.
+struct MonitorItem: Equatable {
+    var chiave: String       // id variante: stabile fra un giro e l'altro
+    var titolo: String
+    var disponibile: Bool
+    var url: String
+    var prezzo: String?
+}
+
+/// Cos'è cambiato fra due controlli. Le stesse due categorie del desktop.
+struct MonitorEvento: Identifiable, Equatable {
+    enum Genere: String { case restock, nuovo }
+
+    var id: String = UUID().uuidString
+    var quando: Date = Date()
+    var bersaglio: String
+    var titolo: String
+    var url: String
+    var genere: Genere
+
+    var etichetta: String {
+        genere == .restock ? "RESTOCK" : "NUOVO"
+    }
+}
+
+/// Una riga del registro, quello che si legge a schermo mentre gira.
+struct MonitorRiga: Identifiable, Equatable {
+    enum Livello: String { case info, avviso, errore, successo }
+
+    var id: String = UUID().uuidString
+    var quando: Date = Date()
+    var bersaglio: String
+    var testo: String
+    var livello: Livello = .info
 }
