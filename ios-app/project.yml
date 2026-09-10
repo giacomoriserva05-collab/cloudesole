@@ -46,6 +46,22 @@ targets:
         # compreso.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
+  # Il controllo che mancava: avviare l'app non basta, se poi crolla
+  # aprendo una scheda. Questi test la toccano dove la tocca una persona.
+  CheckoutAutofillUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: CheckoutAutofillUITests
+    dependencies:
+      - target: CheckoutAutofill
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.giacomoriserva.checkoutautofill.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.9"
+        TEST_TARGET_NAME: CheckoutAutofill
+
 # Senza uno schema condiviso `xcodebuild -scheme` non trova niente, e la
 # compilazione in cloud fallisce prima ancora di leggere una riga di Swift.
 schemes:
@@ -55,5 +71,9 @@ schemes:
         CheckoutAutofill: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - CheckoutAutofillUITests
     archive:
       config: Release
