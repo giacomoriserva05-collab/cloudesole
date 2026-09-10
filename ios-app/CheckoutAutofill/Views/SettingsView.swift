@@ -82,6 +82,37 @@ struct SettingsView: View {
                     }
                 }
 
+                if let trattenuto = ReteDiSicurezza.ultimoTesto() {
+                    Section {
+                        if let quando = ReteDiSicurezza.ultimaData() {
+                            Text(quando, style: .date) + Text(" ") + Text(quando, style: .time)
+                        }
+                        Text("\(ReteDiSicurezza.quanti()) volte da quando è installata.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Text(trattenuto)
+                            .font(.caption2.monospaced())
+                            .lineLimit(10)
+                        Button {
+                            UIPasteboard.general.string = trattenuto
+                        } label: {
+                            Label("Copia il motivo", systemImage: "doc.on.doc")
+                        }
+                        Button(role: .destructive) {
+                            ReteDiSicurezza.dimentica()
+                        } label: {
+                            Label("Dimentica", systemImage: "trash")
+                        }
+                    } header: {
+                        Text("Tocchi persi")
+                    } footer: {
+                        Text("Qui l'app non è caduta: ha lasciato cadere un tocco. "
+                             + "Se questa sezione compare, il crollo che cercavamo è "
+                             + "stato trattenuto — e questo testo dice finalmente da dove "
+                             + "arriva.")
+                    }
+                }
+
                 Section {
                     Text("Il pilota agisce solo dentro il browser di questa app. Su iOS "
                          + "nessuna applicazione può intervenire sulle pagine aperte in "

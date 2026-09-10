@@ -10,8 +10,11 @@ struct CheckoutAutofillApp: App {
     @UIApplicationDelegateAdaptor(PushRegistrar.self) private var push
 
     init() {
-        // Per primo: se qualcosa cade, dev'esserci già chi prende nota.
+        // Per primi i due guardiani, prima che esista qualcosa da guardare.
+        // Il registro prende nota di ciò che fa cadere l'app; la rete evita
+        // che a farla cadere sia un'eccezione nella consegna di un tocco.
         RegistroCrash.installa()
+        ReteDiSicurezza.installa()
 
         let s = Store()
         let w = WebController(store: s)

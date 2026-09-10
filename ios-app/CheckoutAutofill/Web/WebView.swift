@@ -4,14 +4,14 @@ import WebKit
 /// Porta la WKWebView dentro SwiftUI.
 ///
 /// La web view è **una sola** per tutta la vita dell'app: cronologia, cookie e
-/// sessioni restano dove sono anche cambiando scheda. Proprio per questo non
-/// può essere consegnata nuda a SwiftUI: se due rappresentazioni cercassero di
-/// ospitare lo stesso oggetto, UIKit si troverebbe a spostare una vista da un
-/// genitore all'altro — magari mentre sta consegnando un tocco, ed è così che
-/// l'app crollava dentro il codice dei gesti.
+/// sessioni restano dove sono anche cambiando scheda. E da quando si è capito
+/// che il crollo nasceva proprio lì, non lascia mai l'albero delle viste:
+/// `BrowserView` la tiene montata sempre e le mette sopra l'elenco dei negozi
+/// invece di scambiarle. Uscire e rientrare nella gerarchia mentre UIKit sta
+/// consegnando un tocco è ciò che mandava in pezzi il codice dei gesti.
 ///
-/// Qui SwiftUI riceve sempre un contenitore suo, e la web view ci viene
-/// agganciata dentro una volta sola.
+/// Il contenitore serve alla stessa causa: SwiftUI riceve sempre una vista
+/// sua, e la web view ci viene agganciata dentro una volta sola.
 struct WebView: UIViewRepresentable {
     let webView: WKWebView
 
@@ -39,10 +39,32 @@ final class ContenitoreWeb: UIView {
         w.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         addSubview(w)
         ospite = w
+        ContenitoreWeb.spegniRitardoTocchi(da: w)
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         ospite?.frame = bounds
+    }
+
+    /// Toglie il ritardo dei tocchi a tutte le viste a scorrimento della
+    /// pagina, non solo a quella principale.
+    ///
+    /// `-[UIGestureRecognizer _delayTouchesForEvent:inPhase:]` è l'ultima
+    /// chiamata prima dell'abort in ogni resoconto di crash raccolto finora,
+    /// e la eseguono soltanto le viste a scorrimento che trattengono i tocchi
+    /// per decidere a chi consegnarli. WebKit ne crea una per la pagina e
+    /// altre per i riquadri interni.
+    ///
+    /// Si perde poco: i pulsanti della pagina rispondono subito invece di
+    /// aspettare di capire se stavi cominciando a scorrere.
+    static func spegniRitardoTocchi(da vista: UIView) {
+        if let scorrimento = vista as? UIScrollView {
+            scorrimento.delaysContentTouches = false
+            scorrimento.canCancelContentTouches = true
+        }
+        for figlia in vista.subviews {
+            spegniRitardoTocchi(da: figlia)
+        }
     }
 }

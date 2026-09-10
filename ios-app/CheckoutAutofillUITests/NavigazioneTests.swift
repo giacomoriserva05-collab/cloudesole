@@ -56,8 +56,9 @@ final class NavigazioneTests: XCTestCase {
     /// È il punto che ha fatto crollare l'app su un telefono vero: la
     /// WKWebView veniva tolta e rimessa nell'albero delle viste dentro la
     /// gestione del tocco, e UIKit abortiva in
-    /// `-[UIGestureRecognizer _delayTouchesForEvent:]`. Ora le due schermate
-    /// restano montate entrambe; questo test serve a tenerle tali.
+    /// `-[UIGestureRecognizer _delayTouchesForEvent:]`. Ora la pagina resta
+    /// montata sempre e l'elenco le sta sopra, trasparente e sordo ai tocchi;
+    /// questo test serve a tenere quel patto.
     func testAvantiIndietroFraElencoEPagina() throws {
         let app = XCUIApplication()
         app.launch()

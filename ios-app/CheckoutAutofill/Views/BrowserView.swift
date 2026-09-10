@@ -15,24 +15,30 @@ struct BrowserView: View {
             testata
             Divider()
 
-            // Una sola delle due alla volta. Tenerle montate entrambe voleva
-            // dire lasciare la griglia — che è una vista a scorrimento —
-            // invisibile sopra la pagina web: due viste a scorrimento
-            // sovrapposte sono proprio il terreno del crollo nei gesti.
+            // La pagina web resta montata sempre, dal primo istante di
+            // vita dell'app alla fine. Toglierla e rimetterla era la vera
+            // causa del crollo: la WKWebView usciva dall'albero delle viste
+            // e ci rientrava mentre UIKit stava consegnando un tocco, e il
+            // codice dei gesti si trovava fra le mani un tocco senza più un
+            // destinatario.
             //
-            // A proteggere è l'altra metà: il cambio di stato avviene sempre
-            // al giro successivo del ciclo principale, mai dentro la
-            // consegna del tocco che l'ha provocato.
+            // L'elenco dei negozi le sta sopra e si limita a diventare
+            // trasparente. Attenzione: trasparente non basta: una vista
+            // invisibile riceve i tocchi lo stesso, ed è così che il primo
+            // tentativo peggiorò le cose. Serve allowsHitTesting.
             ZStack(alignment: .bottom) {
-                if web.mostraElenco {
-                    ShopsView().background(Color(.systemBackground))
-                } else {
-                    WebView(webView: web.webView)
-                }
+                WebView(webView: web.webView)
 
-                // L'avviso invece resta sempre montato: compare mentre il
-                // pilota lavora, cioè mentre hai il dito sulla pagina. E non
-                // intercetta i tocchi.
+                ShopsView()
+                    .background(Color(.systemBackground))
+                    .opacity(web.mostraElenco ? 1 : 0)
+                    .allowsHitTesting(web.mostraElenco)
+                    // E nemmeno VoiceOver deve leggere una griglia che non
+                    // c'è: invisibile non vuol dire assente.
+                    .accessibilityHidden(!web.mostraElenco)
+
+                // L'avviso compare mentre il pilota lavora, cioè mentre hai
+                // il dito sulla pagina. E non intercetta i tocchi.
                 riquadro
             }
 

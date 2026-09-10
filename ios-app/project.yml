@@ -30,6 +30,10 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.giacomoriserva.checkoutautofill
         INFOPLIST_FILE: CheckoutAutofill/Info.plist
+        # Un pezzo di Objective-C: la rete di sicurezza sui tocchi.
+        # Swift non sa catturare le eccezioni di Objective-C, e quel
+        # crollo e' esattamente un'eccezione.
+        SWIFT_OBJC_BRIDGING_HEADER: CheckoutAutofill/CheckoutAutofill-Bridging-Header.h
         CODE_SIGN_ENTITLEMENTS: CheckoutAutofill/CheckoutAutofill.entitlements
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1,2"
