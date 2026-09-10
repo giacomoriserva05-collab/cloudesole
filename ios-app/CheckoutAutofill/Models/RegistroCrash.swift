@@ -16,6 +16,9 @@ enum RegistroCrash {
     private static let chiaveData = "ultimoCrashData"
 
     static func installa() {
+        // Il gestore è un puntatore a funzione C: la chiusura non può
+        // catturare niente da fuori, nemmeno le costanti qui sopra. Per
+        // questo le chiavi sono ripetute per esteso.
         NSSetUncaughtExceptionHandler { eccezione in
             let pila = eccezione.callStackSymbols.prefix(14).joined(separator: "\n")
             let testo = """
@@ -26,8 +29,8 @@ enum RegistroCrash {
             """
             // Scrittura sincrona: fra un attimo il processo non c'è più.
             let d = UserDefaults.standard
-            d.set(testo, forKey: chiaveTesto)
-            d.set(Date(), forKey: chiaveData)
+            d.set(testo, forKey: "ultimoCrashTesto")
+            d.set(Date(), forKey: "ultimoCrashData")
             d.synchronize()
         }
     }
