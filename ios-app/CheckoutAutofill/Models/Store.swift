@@ -56,6 +56,18 @@ final class Store: ObservableObject {
         if !profiles.contains(where: { $0.id == activeID }) { activeID = profiles[0].id }
         if settings.rememberCard { caricaCarteDalPortachiavi() }
         caricamentoInCorso = false
+
+        // I siti predefiniti arrivano una volta sola: chi ne toglie uno non
+        // se lo ritrova al prossimo avvio. Chi aveva già dei target li trova
+        // accanto ai suoi, senza doppioni di quelli creati a mano.
+        // Dentro init i didSet non scattano: il salvataggio va chiesto.
+        if ud.integer(forKey: "monitorPredefinitiVersione") < 1 {
+            for voce in MonitorPredefiniti.tutti where !giaPresente(voce, in: targets) {
+                targets.append(voce.target)
+            }
+            salva()
+            ud.set(1, forKey: "monitorPredefinitiVersione")
+        }
     }
 
     // MARK: - Profilo attivo
@@ -163,6 +175,25 @@ final class Store: ObservableObject {
 
     func aggiornaTarget(_ t: MonitorTarget) {
         if let i = targets.firstIndex(where: { $0.id == t.id }) { targets[i] = t }
+    }
+
+    /// Vero se quel predefinito c'è già, per nome d'origine o per indirizzo.
+    func haPredefinito(_ voce: MonitorPredefiniti.Voce) -> Bool {
+        giaPresente(voce, in: targets)
+    }
+
+    func aggiungiPredefinito(_ voce: MonitorPredefiniti.Voce) {
+        guard !haPredefinito(voce) else { return }
+        var t = voce.target
+        t.id = UUID().uuidString
+        targets.append(t)
+    }
+
+    private func giaPresente(_ voce: MonitorPredefiniti.Voce, in elenco: [MonitorTarget]) -> Bool {
+        let impronta = MonitorPredefiniti.impronta(voce.target.url)
+        return elenco.contains {
+            $0.preset == voce.id || MonitorPredefiniti.impronta($0.url) == impronta
+        }
     }
 
     // MARK: - Account dei siti

@@ -129,13 +129,24 @@ final class MonitorEngine: NSObject, ObservableObject {
         var disponibili = 0
         var novita: [MonitorEvento] = []
 
+        // Il primo giro fotografa com'è il sito e basta, come fa il monitor
+        // sul computer. Senza, ogni prodotto già in vendita risultava "nuovo":
+        // su Supreme erano 216 notifiche al primo avvio.
+        //
+        // La fotografia si segna a parte, e non si ricava dagli articoli
+        // visti: lo shop di Travis Scott a porte chiuse non mostra nessun
+        // prodotto, e quando apre quelli sono novità vere, non la partenza.
+        let segnoPartenza = t.id + ":__partenza"
+        let primoGiro = visti[segnoPartenza] == nil
+        visti[segnoPartenza] = true
+
         for a in articoli where !a.chiave.isEmpty {
             if a.disponibile { disponibili += 1 }
             let chiave = t.id + ":" + a.chiave
             let prima = visti[chiave]
             visti[chiave] = a.disponibile
 
-            guard a.disponibile else { continue }
+            guard a.disponibile, !primoGiro else { continue }
             if prima == nil {
                 novita.append(MonitorEvento(bersaglio: t.nome, titolo: a.titolo, url: a.url, genere: .nuovo))
             } else if prima == false {
@@ -144,7 +155,12 @@ final class MonitorEngine: NSObject, ObservableObject {
         }
 
         UserDefaults.standard.set(visti, forKey: chiaveStato)
-        scrivi(t.nome, "\(articoli.count) articoli, \(disponibili) disponibili.", .info)
+        if primoGiro {
+            scrivi(t.nome, "Punto di partenza: \(articoli.count) articoli, \(disponibili) "
+                   + "disponibili. Da ora avviso solo su ciò che cambia.", .info)
+        } else {
+            scrivi(t.nome, "\(articoli.count) articoli, \(disponibili) disponibili.", .info)
+        }
         return novita
     }
 
@@ -362,7 +378,7 @@ final class MonitorEngine: NSObject, ObservableObject {
                                                    base: t.base, pagina: effettivo) else { continue }
 
             viste.insert(valore)
-            out.append(MonitorItem(chiave: valore, titolo: valore,
+            out.append(MonitorItem(chiave: valore, titolo: nomeDalPercorso(valore) ?? valore,
                                    disponibile: true, url: indirizzo, prezzo: nil))
             if out.count >= 3000 { break }   // pagine enormi: si mette un tetto
         }
@@ -401,6 +417,36 @@ final class MonitorEngine: NSObject, ObservableObject {
               let schema = u.scheme?.lowercased(), schema == "http" || schema == "https",
               let host = u.host, host.contains(".") else { return nil }
         return u.absoluteURL.absoluteString
+    }
+
+    /// Il nome dall'indirizzo, quando l'indirizzo ne contiene uno.
+    ///
+    /// Nike e Travis Scott scrivono il prodotto per esteso nel link —
+    /// `air-jordan-13-retro-wings-black-emea` — e da lì il nome si ricava
+    /// senza scaricare niente: le pagine Nike pesano un mega l'una, e Nike è
+    /// il sito che più facilmente si accorge di chi le chiede in serie.
+    ///
+    /// Supreme invece usa codici, `0dutzxwbvdjkt-ff`: per quelli restituisce
+    /// nil, e il nome lo va a leggere `conNomiLeggibili` dalla pagina.
+    private func nomeDalPercorso(_ valore: String) -> String? {
+        // "berretto-nike-terra-dri-fit-dIl3AwT3/II5114-082": conta il primo
+        // pezzo, il resto è il codice articolo.
+        guard let pezzo = valore.split(separator: "/").first(where: { !$0.isEmpty }) else { return nil }
+        var parole = pezzo.split(separator: "-").map(String.init)
+
+        // In coda Nike mette un codice di otto caratteri misti: via.
+        if let ultima = parole.last, ultima.count == 8,
+           ultima.contains(where: { $0.isNumber }) || ultima != ultima.lowercased() {
+            parole.removeLast()
+        }
+
+        // Un nome ha parole vere: almeno tre, e fatte di sole lettere quasi
+        // tutte. Un codice spezzato da un trattino non passa.
+        let vere = parole.filter { $0.count >= 2 && $0.allSatisfy(\.isLetter) }
+        guard vere.count >= 3, Double(vere.count) >= Double(parole.count) * 0.6 else { return nil }
+
+        let testo = parole.joined(separator: " ")
+        return testo.prefix(1).uppercased() + testo.dropFirst()
     }
 
     // MARK: - Dal codice al nome

@@ -19,6 +19,7 @@ struct MonitorView: View {
                 sezioneTelefono
                 sezioneAvvisi
                 sezioneTarget
+                sezionePredefiniti
                 sezioneRegistro
             }
             .navigationTitle("Monitor")
@@ -164,6 +165,42 @@ struct MonitorView: View {
             }
             .onDelete { indici in
                 for i in indici { store.rimuoviTarget(store.targets[i]) }
+            }
+        }
+    }
+
+    // MARK: - Siti predefiniti
+
+    /// Quelli che mancano, da rimettere con un tocco. Compaiono qui solo se
+    /// ne hai tolto qualcuno: al primo avvio sono già tutti fra i target.
+    @ViewBuilder
+    private var sezionePredefiniti: some View {
+        let mancanti = MonitorPredefiniti.tutti.filter { !store.haPredefinito($0) }
+        if !mancanti.isEmpty {
+            Section {
+                ForEach(mancanti) { voce in
+                    Button {
+                        store.aggiungiPredefinito(voce)
+                    } label: {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundStyle(.green)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(voce.target.nome)
+                                    .font(.callout)
+                                    .foregroundStyle(.primary)
+                                Text(voce.spiegazione)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("Siti predefiniti")
+            } footer: {
+                Text("Configurazioni già provate sul sito vero. Toccane una per "
+                     + "rimetterla fra i target.")
             }
         }
     }

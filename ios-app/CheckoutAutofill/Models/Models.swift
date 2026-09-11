@@ -338,6 +338,10 @@ struct MonitorTarget: Codable, Identifiable, Equatable {
     /// Parole che la escludono.
     var tranneSe: String = ""
 
+    /// Il predefinito da cui nasce, se nasce da uno. Opzionale apposta:
+    /// i target salvati prima che esistesse si leggono lo stesso.
+    var preset: String?
+
     var elencoSoloSe: [String] { Self.parole(soloSe) }
     var elencoTranneSe: [String] { Self.parole(tranneSe) }
 
@@ -361,6 +365,139 @@ struct MonitorTarget: Codable, Identifiable, Equatable {
         taglie.split(whereSeparator: { $0 == "," || $0 == " " })
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
+    }
+}
+
+/// I siti che il monitor conosce già: si aggiungono con un tocco.
+///
+/// Ognuno è stato provato interrogando davvero il sito, l'11/09/2026, con lo
+/// stesso User-Agent dell'app. Sono gli stessi del monitor sul computer, e ne
+/// ereditano la regola: se un sito cambia impaginazione, il predefinito va
+/// ricontrollato.
+///
+/// Per "EU" si intende il negozio italiano: Nike non ha un negozio europeo
+/// unico, ne ha uno per paese. Per cambiarlo basta sostituire `/it/` con un
+/// altro codice (`/fr/`, `/de/`) nell'indirizzo, nello schema e nell'inizio.
+enum MonitorPredefiniti {
+    struct Voce: Identifiable {
+        let id: String
+        let sito: String
+        let spiegazione: String
+        let target: MonitorTarget
+    }
+
+    static let tutti: [Voce] = [
+        Voce(id: "supreme-eu",
+             sito: "Supreme",
+             spiegazione: "Ogni prodotto nuovo nello shop europeo. Supreme chiude gli "
+                + "endpoint JSON, quindi si leggono i link della collezione completa: "
+                + "216 prodotti alla prova.",
+             target: elenco(id: "supreme-eu",
+                            nome: "Supreme EU",
+                            url: "https://eu.supreme.com/collections/all",
+                            schema: "/products/([A-Za-z0-9._-]{2,90})",
+                            base: "https://eu.supreme.com/products/",
+                            ogni: 30)),
+
+        Voce(id: "travis-apertura",
+             sito: "Travis Scott",
+             spiegazione: "Fra un drop e l'altro lo shop è chiuso da una password. Questo "
+                + "avvisa nel momento in cui la toglie, cioè quando il drop comincia.",
+             target: pagina(id: "travis-apertura",
+                            nome: "Travis Scott · apertura shop",
+                            url: "https://shop.travisscott.com/",
+                            // Il modulo della password c'è solo a shop chiuso.
+                            esaurito: "storefront_password",
+                            // E questo c'è in ogni pagina di un negozio Shopify,
+                            // aperto o chiuso: se manca non è lo shop che
+                            // risponde (una verifica anti-bot, un errore), e
+                            // un falso "aperto" è peggio di nessun avviso.
+                            disponibile: "Shopify.shop",
+                            ogni: 30)),
+
+        Voce(id: "travis-nuovi",
+             sito: "Travis Scott",
+             spiegazione: "A shop aperto, ogni prodotto che compare. A shop chiuso non "
+                + "trova niente, ed è normale: ci pensa l'avviso d'apertura.",
+             target: elenco(id: "travis-nuovi",
+                            nome: "Travis Scott · nuovi prodotti",
+                            url: "https://shop.travisscott.com/collections/all",
+                            schema: "/products/([a-z0-9][a-z0-9-]{2,60})",
+                            base: "https://shop.travisscott.com/products/",
+                            ogni: 60)),
+
+        Voce(id: "nike-novita",
+             sito: "Nike",
+             spiegazione: "La pagina Novità di nike.com: le uscite normali, senza "
+                + "estrazione, dove chi arriva prima compra davvero.",
+             target: elenco(id: "nike-novita",
+                            nome: "Nike EU · novità",
+                            url: "https://www.nike.com/it/w/nuovo-3n82y",
+                            schema: "/it/t/([A-Za-z0-9-]{4,90}/[A-Z0-9-]{4,20})",
+                            base: "https://www.nike.com/it/t/",
+                            // Pagine da un mega: più spesso non serve e dà nell'occhio.
+                            ogni: 180)),
+
+        Voce(id: "snkrs-disponibili",
+             sito: "SNKRS",
+             spiegazione: "Il lancio passa da \"in arrivo\" ad \"acquistabile\". "
+                + "In Europa molti lanci SNKRS sono estrazioni: l'avviso ti dice che la "
+                + "finestra si è aperta.",
+             target: elenco(id: "snkrs-disponibili",
+                            nome: "SNKRS EU · appena disponibili",
+                            url: "https://www.nike.com/it/launch/in-stock",
+                            schema: "/it/launch/t/([a-z0-9-]{4,90})",
+                            base: "https://www.nike.com/it/launch/t/",
+                            ogni: 90)),
+
+        Voce(id: "snkrs-lanci",
+             sito: "SNKRS",
+             spiegazione: "Un lancio messo in calendario che prima non c'era: giorni di "
+                + "margine per organizzarsi.",
+             target: elenco(id: "snkrs-lanci",
+                            nome: "SNKRS EU · lanci annunciati",
+                            url: "https://www.nike.com/it/launch/upcoming",
+                            schema: "/it/launch/t/([a-z0-9-]{4,90})",
+                            base: "https://www.nike.com/it/launch/t/",
+                            // Il calendario cambia poche volte al giorno.
+                            ogni: 300))
+    ]
+
+    private static func elenco(id: String, nome: String, url: String,
+                               schema: String, base: String, ogni: Double) -> MonitorTarget {
+        var t = MonitorTarget(nome: nome, url: url)
+        t.tipo = .elenco
+        t.schema = schema
+        t.base = base
+        t.intervallo = ogni
+        t.preset = id
+        return t
+    }
+
+    private static func pagina(id: String, nome: String, url: String,
+                               esaurito: String, disponibile: String,
+                               ogni: Double) -> MonitorTarget {
+        var t = MonitorTarget(nome: nome, url: url)
+        t.tipo = .pagina
+        t.marcatoriEsaurito = esaurito
+        t.marcatoriDisponibile = disponibile
+        t.intervallo = ogni
+        t.preset = id
+        return t
+    }
+
+    /// Dominio e percorso, senza sottodominio: `us.supreme.com/collections/all`
+    /// e `eu.supreme.com/collections/all` sono la stessa cosa, perché il primo
+    /// rimanda al secondo. Serve a non aggiungere un doppione di un target che
+    /// hai già creato a mano.
+    static func impronta(_ indirizzo: String) -> String {
+        guard let u = URL(string: indirizzo.trimmingCharacters(in: .whitespaces)),
+              let host = u.host?.lowercased() else { return indirizzo.lowercased() }
+        let pezzi = host.split(separator: ".")
+        let dominio = pezzi.suffix(2).joined(separator: ".")
+        var percorso = u.path.lowercased()
+        while percorso.hasSuffix("/") { percorso.removeLast() }
+        return dominio + percorso
     }
 }
 
