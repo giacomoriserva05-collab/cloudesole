@@ -46,6 +46,11 @@ class Change:
             # Un restock e' per definizione tornato disponibile: dirlo sarebbe ridondante.
             return f"[RESTOCK] {self.target} - {self.item.title}"
 
+        if self.kind == "sconto":
+            calo = self.item.extra.get("calo_pct")
+            quanto = f" (-{calo:g}%)" if calo else ""
+            return f"[SCONTO{quanto}] {self.target} - {self.item.title}"
+
         stato = ""
         if self.item.verified:
             stato = " [DISPONIBILE]" if self.item.available else " [ESAURITO]"

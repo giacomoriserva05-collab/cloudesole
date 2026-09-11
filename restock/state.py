@@ -54,12 +54,31 @@ class State:
     def is_seeded(self, target_name: str) -> bool:
         return target_name in self._seeded
 
+    @staticmethod
+    def _calo_prezzo(previous: dict, item: Item) -> float | None:
+        """Percentuale di calo rispetto al prezzo ricordato, None se non confrontabile."""
+        prima = previous.get("prezzo_num")
+        adesso = item.extra.get("prezzo_num")
+        if not prima or adesso is None or adesso >= prima:
+            return None
+        return (1 - adesso / prima) * 100
+
     def known(self, target_name: str, key: str) -> dict | None:
         """Ultimo stato salvato per un articolo, o None se mai visto."""
         return self._data.get(f"{target_name}::{key}")
 
-    def diff(self, target_name: str, items: list[Item]) -> list[Change]:
-        """Confronta gli item appena letti con lo stato salvato e restituisce le novita'."""
+    def diff(
+        self,
+        target_name: str,
+        items: list[Item],
+        soglia_sconto: float | None = None,
+    ) -> list[Change]:
+        """Confronta gli item appena letti con lo stato salvato e restituisce le novita'.
+
+        Con 'soglia_sconto' (in percento) segnala anche i cali di prezzo: un
+        articolo che era a 100 e ora e' a 90 produce uno 'sconto' se la soglia e'
+        al massimo del 10%. Senza soglia il prezzo viene solo ricordato.
+        """
         first_run = not self.is_seeded(target_name)
         changes: list[Change] = []
 
@@ -76,6 +95,13 @@ class State:
                         changes.append(Change(target_name, item, "new"))
                 elif item.available and not previous.get("available"):
                     changes.append(Change(target_name, item, "restock"))
+                elif soglia_sconto is not None and item.available:
+                    calo = self._calo_prezzo(previous, item)
+                    if calo is not None and calo >= soglia_sconto:
+                        # Il prezzo di prima serve alla notifica: "era 649, ora 619".
+                        item.extra["prezzo_precedente"] = previous.get("prezzo_num")
+                        item.extra["calo_pct"] = round(calo, 1)
+                        changes.append(Change(target_name, item, "sconto"))
 
             salvato = {
                 "available": item.available,
@@ -91,6 +117,13 @@ class State:
                 salvato["nome_pagina"] = item.extra["nome_pagina"]
             if item.extra.get("taglie"):
                 salvato["taglie"] = item.extra["taglie"]
+            if item.extra.get("prezzo_num") is not None:
+                salvato["prezzo_num"] = item.extra["prezzo_num"]
+            elif previous and previous.get("prezzo_num") is not None and not item.available:
+                # Un prodotto esaurito spesso perde il prezzo in pagina: si
+                # conserva l'ultimo noto, altrimenti al ritorno non ci sarebbe
+                # niente con cui confrontarlo.
+                salvato["prezzo_num"] = previous["prezzo_num"]
             self._data[key] = salvato
 
         self._seeded.add(target_name)

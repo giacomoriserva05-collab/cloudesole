@@ -159,6 +159,16 @@ class PoliteClient:
 
             return response
 
+    def pausa(self, url: str, secondi: float) -> None:
+        """Mette in pausa un host per un tempo deciso da fuori.
+
+        Serve quando il segnale di rallentare non arriva come codice HTTP ma nel
+        contenuto: una verifica anti-bot risponde 200, e solo leggendo la
+        pagina si capisce che bisogna fermarsi.
+        """
+        _origin, state = self._host_state(url)
+        state.cooldown_until = max(state.cooldown_until, time.monotonic() + secondi)
+
     def _backoff(self, state: _HostState, *, bump: bool = False) -> float:
         if bump:
             state.consecutive_errors += 1

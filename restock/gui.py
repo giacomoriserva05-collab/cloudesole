@@ -47,6 +47,8 @@ TYPE_LABELS = {
     "json": "API JSON",
     "html": "Pagina HTML",
     "links": "Elenco di link",
+    "amazon_search": "Ricerca Amazon",
+    "amazon_product": "Prodotto Amazon",
 }
 LABEL_TO_TYPE = {v: k for k, v in TYPE_LABELS.items()}
 
@@ -70,6 +72,14 @@ TYPE_HELP = {
     "links": (
         "Sorveglia un elenco (pagina o sitemap) e avvisa quando compare una voce\n"
         "nuova. Per i siti dove la disponibilita' non e' leggibile ma il catalogo si'."
+    ),
+    "amazon_search": (
+        "Una ricerca o una categoria di amazon.it: incolla l'indirizzo della pagina\n"
+        "dei risultati. Avvisa di restock, prodotti nuovi e cali di prezzo."
+    ),
+    "amazon_product": (
+        "Un solo prodotto Amazon: va bene l'indirizzo copiato dal browser, anche con\n"
+        "tutti i parametri. Avvisa quando torna disponibile e quando scende di prezzo."
     ),
 }
 

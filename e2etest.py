@@ -30,6 +30,8 @@ STATE = {
     "stock": {"uno": True, "due": False, "tre": False},
     "schede_aperte": [],
     "pagine_chieste": [],
+    # Finto Amazon: il prezzo della console si puo' abbassare fra un giro e l'altro.
+    "prezzo_amazon": "649,99",
 }
 
 ROBOTS = "User-agent: *\nAllow: /\nDisallow: /vietato\n"
@@ -117,6 +119,21 @@ class Handler(BaseHTTPRequestHandler):
                 f"<body><h1>{nome}</h1>"
                 f'<script>{{"available":{stato}}}</script></body></html>'
             ).encode()
+            ctype = "text/html"
+        elif path == "/s":
+            body = (
+                '<div data-asin="B0FINTO001" data-component-type="s-search-result">'
+                '<h2><span>Console Finta</span></h2>'
+                f'<span class="a-price" data-a-size="xl"><span class="a-offscreen">{STATE["prezzo_amazon"]} €</span></span>'
+                '</div>'
+                '<div data-asin="B0FINTO002" data-component-type="s-search-result">'
+                '<h2><span>Gioco Fisso</span></h2>'
+                '<span class="a-price" data-a-size="xl"><span class="a-offscreen">59,99 €</span></span>'
+                '</div>'
+            ).encode()
+            ctype = "text/html"
+        elif path == "/sfida":
+            body = b"<html><form action='/errors/validateCaptcha'>Inserisci i caratteri che vedi</form></html>"
             ctype = "text/html"
         elif path == "/lento.js":
             self.send_response(429)
@@ -446,6 +463,63 @@ def main() -> int:
             show("giro 11b - la configurazione proposta funziona davvero", prova)
             if prova.returncode != 0 or "[OK]" not in prova.stdout:
                 failures.append("il target proposto dall'analisi non ha funzionato")
+
+        # 12. Amazon: un calo di prezzo oltre la soglia produce uno SCONTO.
+        az_dir = tmpdir / "z"
+        az_dir.mkdir()
+        az_cfg = write_config(
+            az_dir,
+            "  - name: Amazon finto\n"
+            "    type: amazon_search\n"
+            f"    url: {base}/s?k=console\n"
+            "    options:\n"
+            "      soglia_sconto: 5\n",
+        )
+        STATE["prezzo_amazon"] = "649,99"
+        seme = run(az_cfg)
+        show("giro 12a - Amazon, stato iniziale", seme)
+        if "2 articoli, 2 disponibili" not in seme.stdout:
+            failures.append("la ricerca Amazon doveva dare 2 prodotti con prezzo")
+
+        STATE["prezzo_amazon"] = "639,00"  # -1.7%: sotto soglia
+        poco = run(az_cfg)
+        show("giro 12b - calo sotto soglia", poco)
+        if "SCONTO" in poco.stdout:
+            failures.append("un calo sotto la soglia non doveva notificare")
+
+        STATE["prezzo_amazon"] = "579,00"  # -9.4% rispetto a 639
+        molto = run(az_cfg)
+        show("giro 12c - calo oltre soglia", molto)
+        if "SCONTO" not in molto.stdout:
+            failures.append("un calo oltre la soglia doveva produrre uno SCONTO")
+        if "Console Finta" not in molto.stdout:
+            failures.append("lo sconto doveva citare il prodotto")
+        if "era 639,00" not in molto.stdout:
+            failures.append("lo sconto doveva dire il prezzo di prima")
+        if molto.stdout.count("[SCONTO") != 1:
+            failures.append("doveva risultare scontato un solo prodotto, non quello a prezzo fisso")
+
+        fermo = run(az_cfg)
+        show("giro 12d - prezzo invariato", fermo)
+        if "SCONTO" in fermo.stdout:
+            failures.append("lo stesso prezzo non doveva essere notificato due volte")
+
+        # 13. Verifica anti-bot: riconosciuta, non interpretata come dati.
+        sf_dir = tmpdir / "v"
+        sf_dir.mkdir()
+        sf_cfg = write_config(
+            sf_dir,
+            "  - name: Amazon sfida\n"
+            "    type: amazon_search\n"
+            f"    url: {base}/sfida\n",
+        )
+        sfida = run(sf_cfg)
+        show("giro 13 - verifica anti-bot", sfida)
+        insieme = sfida.stdout + sfida.stderr
+        if "verifica anti-bot" not in insieme:
+            failures.append("la verifica anti-bot doveva essere riconosciuta e segnalata")
+        if "Pausa di 30 minuti" not in insieme:
+            failures.append("dopo una verifica anti-bot l'host doveva andare in pausa")
 
     server.shutdown()
 

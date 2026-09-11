@@ -224,6 +224,7 @@ struct MonitorView: View {
 
     private func dettaglio(_ t: MonitorTarget) -> String {
         var parti = [t.tipo.descrizione, "ogni \(Int(t.intervallo))s"]
+        if t.tipo == .elenco && t.approfondisce { parti.append("\(t.schedeOgniGiro) schede a giro") }
         if !t.elencoTaglie.isEmpty { parti.append("taglie " + t.elencoTaglie.joined(separator: ", ")) }
         return parti.joined(separator: " · ")
     }
@@ -325,6 +326,7 @@ struct TargetView: View {
     }
 
     /// Pesca i link dei prodotti da una pagina d'elenco.
+    @ViewBuilder
     private var sezioneElenco: some View {
         Section {
             TextField("Schema dei link", text: $target.schema)
@@ -341,8 +343,45 @@ struct TargetView: View {
         } footer: {
             Text("Lo schema è un'espressione regolare: il pezzo fra parentesi è quello "
                  + "tenuto. Quello predefinito prende gli identificatori dei prodotti "
-                 + "Shopify. **Qui ogni voce vale come disponibile**: il segnale è la "
-                 + "comparsa di un prodotto che prima non c'era, non il ritorno in stock.")
+                 + "Shopify.")
+        }
+
+        Section {
+            Toggle("Apri le schede dei prodotti", isOn: $target.approfondisce)
+            if target.approfondisce {
+                Stepper("\(target.schedeOgniGiro) schede a ogni giro",
+                        value: $target.schedeOgniGiro, in: 1...30)
+                TextField("Disponibile se la scheda contiene", text: $target.marcatoriSchedaDisponibile,
+                          axis: .vertical)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .font(.callout.monospaced())
+                TextField("Esaurito se contiene (facoltativo)", text: $target.marcatoriSchedaEsaurito,
+                          axis: .vertical)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .font(.callout.monospaced())
+                TextField("Giudica solo se contiene (facoltativo)",
+                          text: $target.marcatoriSchedaRiconosciuta, axis: .vertical)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .font(.callout.monospaced())
+                Toggle("Espressioni regolari", isOn: $target.marcatoriSchedaRegex)
+                if target.marcatoriSchedaDisponibile.isEmpty {
+                    Button("Usa il marcatore di Shopify e Nike") {
+                        target.marcatoriSchedaDisponibile = MarcatoriScheda.disponibile
+                        target.marcatoriSchedaRiconosciuta = MarcatoriScheda.riconosciuta
+                        target.marcatoriSchedaRegex = true
+                    }
+                }
+            }
+        } header: {
+            Text("Restock")
+        } footer: {
+            Text(target.approfondisce
+                 ? "A ogni giro si aprono alcune schede: prima i prodotti appena "
+                   + "comparsi, poi a turno quelli esauriti o mai aperti. Quando uno "
+                   + "esaurito torna acquistabile arriva l'avviso di restock. Una frase per "
+                   + "riga; l'esaurito ha la precedenza."
+                 : "Spento, ogni voce dell'elenco vale come disponibile: ti avviso quando "
+                   + "compare un prodotto nuovo, ma non quando uno esaurito torna in stock.")
         }
     }
 

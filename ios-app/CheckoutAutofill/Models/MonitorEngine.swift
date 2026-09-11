@@ -26,10 +26,27 @@ final class MonitorEngine: NSObject, ObservableObject {
     /// I nomi già letti, per non richiedere due volte la stessa pagina.
     private let cacheNomi = CacheNomi()
 
+    /// chiave articolo -> disponibilità accertata aprendo la scheda. Chi non
+    /// è qui è stato visto in elenco ma mai aperto.
+    private var accertati: [String: Bool] = [:]
+    /// chiave articolo -> nome letto dalla scheda. Si conserva: la scheda non
+    /// si riapre a ogni giro, e senza tornerebbe a vedersi il codice.
+    private var nomiScheda: [String: String] = [:]
+    /// Da dove riprende, per ogni target, il giro sulle schede da rivedere.
+    private var rotazione: [String: Int] = [:]
+    private let chiaveAccertati = "monitorAccertati"
+    private let chiaveNomiScheda = "monitorNomiScheda"
+
     override init() {
         super.init()
         if let d = UserDefaults.standard.dictionary(forKey: chiaveStato) as? [String: Bool] {
             visti = d
+        }
+        if let d = UserDefaults.standard.dictionary(forKey: chiaveAccertati) as? [String: Bool] {
+            accertati = d
+        }
+        if let d = UserDefaults.standard.dictionary(forKey: chiaveNomiScheda) as? [String: String] {
+            nomiScheda = d
         }
         UNUserNotificationCenter.current().delegate = self
         aggiornaPermesso()
@@ -80,7 +97,12 @@ final class MonitorEngine: NSObject, ObservableObject {
     /// "nuovo". Serve quando si cambia target e i vecchi articoli confondono.
     func azzeraStato() {
         visti.removeAll()
+        accertati.removeAll()
+        nomiScheda.removeAll()
+        rotazione.removeAll()
         UserDefaults.standard.removeObject(forKey: chiaveStato)
+        UserDefaults.standard.removeObject(forKey: chiaveAccertati)
+        UserDefaults.standard.removeObject(forKey: chiaveNomiScheda)
         scrivi("Generale", "Stato azzerato.", .info)
     }
 
@@ -102,7 +124,10 @@ final class MonitorEngine: NSObject, ObservableObject {
 
     private func unGiro(_ t: MonitorTarget, userAgent: String) async {
         do {
-            let articoli = try await interroga(t, userAgent: userAgent)
+            var articoli = try await interroga(t, userAgent: userAgent)
+            if t.tipo == .elenco && t.approfondisce {
+                articoli = await approfondisci(t, articoli, userAgent: userAgent)
+            }
             let novita = await MainActor.run { () -> [MonitorEvento] in
                 ultimoControllo[t.id] = Date()
                 return confronta(t, articoli)
@@ -379,7 +404,8 @@ final class MonitorEngine: NSObject, ObservableObject {
 
             viste.insert(valore)
             out.append(MonitorItem(chiave: valore, titolo: nomeDalPercorso(valore) ?? valore,
-                                   disponibile: true, url: indirizzo, prezzo: nil))
+                                   disponibile: true, url: indirizzo, prezzo: nil,
+                                   verificato: false))
             if out.count >= 3000 { break }   // pagine enormi: si mette un tetto
         }
         return out
@@ -417,6 +443,124 @@ final class MonitorEngine: NSObject, ObservableObject {
               let schema = u.scheme?.lowercased(), schema == "http" || schema == "https",
               let host = u.host, host.contains(".") else { return nil }
         return u.absoluteURL.absoluteString
+    }
+
+    // MARK: - Le schede dei prodotti
+
+    /// Apre le schede dei prodotti per sapere quali si possono comprare.
+    ///
+    /// È ciò che fa di un elenco di link un monitor di restock: senza, si sa
+    /// solo che un prodotto c'è, non che è tornato acquistabile. Aprirle tutte
+    /// a ogni giro sarebbe un carico assurdo sul sito, quindi se ne apre un
+    /// numero fisso: prima quelle mai viste, poi a rotazione quelle mai aperte
+    /// e quelle esaurite, così nel giro di qualche ciclo passano tutte.
+    ///
+    /// È la stessa logica del monitor sul computer.
+    private func approfondisci(_ t: MonitorTarget, _ articoli: [MonitorItem],
+                               userAgent: String) async -> [MonitorItem] {
+        // Una fotografia dello stato: il resto del motore lo tocca dal thread
+        // principale, e qui si lavora in sottofondo.
+        let (vistiOra, accertatiOra, nomiOra, giro) = await MainActor.run {
+            (visti, accertati, nomiScheda, rotazione[t.id] ?? 0)
+        }
+        func chiave(_ a: MonitorItem) -> String { t.id + ":" + a.chiave }
+
+        var nuovi: [MonitorItem] = []
+        var daRivedere: [MonitorItem] = []
+        for a in articoli {
+            let k = chiave(a)
+            if vistiOra[k] == nil {
+                nuovi.append(a)
+            } else if accertatiOra[k] != true {
+                // Mai aperta, oppure esaurita: è qui che si nasconde un restock.
+                daRivedere.append(a)
+            }
+        }
+        let budget = max(1, t.schedeOgniGiro)
+        if !daRivedere.isEmpty {
+            let da = giro % daRivedere.count
+            daRivedere = Array(daRivedere[da...] + daRivedere[..<da])
+        }
+        let daAprire = Array((nuovi + daRivedere).prefix(budget))
+
+        var esiti: [String: Bool] = [:]
+        var nomi: [String: String] = [:]
+        for (i, a) in daAprire.enumerated() {
+            if Task.isCancelled { break }
+            // Un respiro fra una scheda e l'altra: in fila e senza pause
+            // sembrerebbe esattamente quello che è.
+            if i > 0 { try? await Task.sleep(nanoseconds: UInt64.random(in: 300_000_000...700_000_000)) }
+            guard let (corpo, host) = await scarica(a.url, userAgent: userAgent) else { continue }
+            guard let esito = giudica(corpo, t) else { continue }
+            esiti[chiave(a)] = esito
+            if let n = nomeDalCodice(corpo, host: host) { nomi[chiave(a)] = n }
+        }
+
+        let rivisti = max(0, budget - nuovi.count)
+        await MainActor.run {
+            rotazione[t.id] = giro + rivisti
+            for (k, v) in esiti { accertati[k] = v }
+            for (k, v) in nomi { nomiScheda[k] = v }
+            UserDefaults.standard.set(accertati, forKey: chiaveAccertati)
+            UserDefaults.standard.set(nomiScheda, forKey: chiaveNomiScheda)
+            if !esiti.isEmpty {
+                let si = esiti.values.filter { $0 }.count
+                scrivi(t.nome, "Schede aperte: \(esiti.count), \(si) acquistabili.", .info)
+            }
+        }
+
+        return articoli.map { a in
+            let k = chiave(a)
+            var b = a
+            if let n = nomi[k] ?? nomiOra[k] { b.titolo = n }
+            if let accertato = esiti[k] ?? accertatiOra[k] {
+                b.disponibile = accertato
+                b.verificato = true
+            }
+            // Mai aperta: resta "presente in elenco". Tornare a "disponibile"
+            // per difetto una scheda già vista esaurita produrrebbe un falso
+            // restock al giro dopo: per questo l'ultimo esito accertato vale
+            // finché non se ne legge uno nuovo.
+            return b
+        }
+    }
+
+    /// La scheda, oppure nil se non risponde come dovrebbe. Un errore non è
+    /// un "esaurito": è un "non so", e un "non so" non si registra.
+    private func scarica(_ indirizzo: String, userAgent: String) async -> (String, String)? {
+        guard let url = URL(string: indirizzo) else { return nil }
+        var r = URLRequest(url: url)
+        r.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        r.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
+        r.timeoutInterval = 12
+        r.cachePolicy = .reloadIgnoringLocalCacheData
+        guard let (dati, risposta) = try? await URLSession.shared.data(for: r),
+              let http = risposta as? HTTPURLResponse,
+              (200...299).contains(http.statusCode) else { return nil }
+        let corpo = String(data: dati, encoding: .utf8) ?? String(decoding: dati, as: UTF8.self)
+        return (corpo, http.url?.host ?? url.host ?? "")
+    }
+
+    /// Disponibile, esaurito, o nil se la pagina non è la scheda del prodotto.
+    /// L'esaurito ha la precedenza, come nelle pagine qualsiasi.
+    private func giudica(_ corpo: String, _ t: MonitorTarget) -> Bool? {
+        let regex = t.marcatoriSchedaRegex
+        let riconosciuta = t.elencoSchedaRiconosciuta
+        if !riconosciuta.isEmpty && !trovato(riconosciuta, in: corpo, regex: regex) { return nil }
+        let esaurito = t.elencoSchedaEsaurito
+        if !esaurito.isEmpty && trovato(esaurito, in: corpo, regex: regex) { return false }
+        return trovato(t.elencoSchedaDisponibile, in: corpo, regex: regex)
+    }
+
+    /// Il nome del prodotto da una scheda già scaricata: costa zero richieste
+    /// in più, e vale molto più del codice nell'indirizzo.
+    private func nomeDalCodice(_ corpo: String, host: String) -> String? {
+        let testa = String(corpo.prefix(300_000))
+        guard let grezzo = primoGruppo(SchemiTitolo.og, testa)
+                ?? primoGruppo(SchemiTitolo.ogRovescio, testa)
+                ?? primoGruppo(SchemiTitolo.titolo, testa) else { return nil }
+        let n = ripulisci(grezzo, host: host)
+        return n.isEmpty ? nil : n
     }
 
     /// Il nome dall'indirizzo, quando l'indirizzo ne contiene uno.

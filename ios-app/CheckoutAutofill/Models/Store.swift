@@ -68,6 +68,24 @@ final class Store: ObservableObject {
             salva()
             ud.set(1, forKey: "monitorPredefinitiVersione")
         }
+
+        // Versione 2: il controllo delle schede. Chi aveva già i predefiniti
+        // lo riceve su quelli che lo reggono, e anche sul target che aveva
+        // creato a mano sullo stesso indirizzo — è il suo Supreme, ed è lì che
+        // i restock servono. Non si tocca chi l'ha già configurato da sé.
+        if ud.integer(forKey: "monitorPredefinitiVersione") < 2 {
+            for (id, schede) in MonitorPredefiniti.schedePerPredefinito {
+                guard let voce = MonitorPredefiniti.tutti.first(where: { $0.id == id }) else { continue }
+                let impronta = MonitorPredefiniti.impronta(voce.target.url)
+                for i in targets.indices where targets[i].approfondisci == nil
+                    && targets[i].tipo == .elenco
+                    && (targets[i].preset == id || MonitorPredefiniti.impronta(targets[i].url) == impronta) {
+                    MonitorPredefiniti.conApprofondimento(&targets[i], schede: schede)
+                }
+            }
+            salva()
+            ud.set(2, forKey: "monitorPredefinitiVersione")
+        }
     }
 
     // MARK: - Profilo attivo

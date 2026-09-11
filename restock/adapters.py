@@ -549,12 +549,209 @@ def parse_links(target: Target, response: httpx.Response) -> list[Item]:
 
 
 # --------------------------------------------------------------------------- #
+# Amazon
+# --------------------------------------------------------------------------- #
+
+class SfidaAntiBot(AdapterError):
+    """La pagina e' una verifica anti-bot, non il contenuto richiesto.
+
+    Va trattata a parte: il monitor mette in pausa l'intero host invece di
+    riprovare a ogni giro, che e' esattamente il comportamento che fa passare
+    da una verifica occasionale a un blocco vero.
+    """
+
+
+_SEGNI_SFIDA = (
+    "/errors/validatecaptcha",
+    "inserisci i caratteri che vedi",
+    "enter the characters you see",
+    "api-services-support@amazon",
+    "type the characters you see",
+)
+
+
+def _controlla_sfida(corpo: str) -> None:
+    basso = corpo[:40_000].lower()
+    if any(segno in basso for segno in _SEGNI_SFIDA):
+        raise SfidaAntiBot("Amazon ha risposto con una verifica anti-bot.")
+
+
+def prezzo_italiano(testo: str | None) -> float | None:
+    """'1.234,56 €' -> 1234.56. I prezzi su amazon.it hanno la virgola decimale."""
+    if not testo:
+        return None
+    cifre = re.sub(r"[^\d,.]", "", html.unescape(testo))
+    if not cifre:
+        return None
+    if "," in cifre:
+        cifre = cifre.replace(".", "").replace(",", ".")
+    try:
+        return float(cifre)
+    except ValueError:
+        return None
+
+
+def _euro(valore: float | None) -> str | None:
+    if valore is None:
+        return None
+    return f"{valore:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _testo(frammento: str) -> str:
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", frammento))).strip()
+
+
+# Le classi del prezzo cambiano fra ricerca e scheda ("a-price priceToPay
+# apex-pricetopay-value" contro il semplice "a-price"): conta solo che ci sia
+# 'a-price', e il barrato si riconosce da 'a-text-price'.
+_PREZZI = re.compile(
+    r'<span class="a-price\b([^"]*)"[^>]*>\s*<span class="a-offscreen">([^<]+)</span>'
+)
+
+
+def _prezzi_blocco(blocco: str) -> tuple[float | None, float | None]:
+    """(prezzo attuale, prezzo barrato). Il barrato e' il 'a-text-price'."""
+    attuale = listino = None
+    for classi, valore in _PREZZI.findall(blocco):
+        numero = prezzo_italiano(valore)
+        if numero is None:
+            continue
+        barrato = "a-text-price" in classi
+        if barrato and listino is None:
+            listino = numero
+        elif not barrato and attuale is None:
+            attuale = numero
+    if listino is not None and attuale is not None and listino <= attuale:
+        listino = None  # un "barrato" non superiore al prezzo non e' uno sconto
+    return attuale, listino
+
+
+def _item_amazon(
+    origine: str,
+    asin: str,
+    titolo: str,
+    disponibile: bool,
+    attuale: float | None,
+    listino: float | None,
+) -> Item:
+    sconto = None
+    if attuale and listino:
+        sconto = round((1 - attuale / listino) * 100)
+    return Item(
+        key=asin,
+        title=titolo or asin,
+        available=disponibile,
+        url=f"{origine}/dp/{asin}",
+        price=_euro(attuale),
+        extra={"prezzo_num": attuale, "listino_num": listino, "sconto_pct": sconto},
+    )
+
+
+def parse_amazon_search(target: Target, response: httpx.Response) -> list[Item]:
+    """Pagina di ricerca o di categoria: decine di prodotti con prezzo in una richiesta.
+
+    E' il modo efficiente di seguire Amazon: una scheda prodotto pesa quasi
+    2 MB, una ricerca ne pesa uno e contiene 48 prodotti con prezzo e sconto.
+    """
+    corpo = response.text
+    _controlla_sfida(corpo)
+
+    origine = _origin(str(response.url) or target.url)
+    inizi = [
+        (m.start(), m.group(1))
+        for m in re.finditer(
+            r'<div[^>]*data-asin="([A-Z0-9]{10})"[^>]*data-component-type="s-search-result"', corpo
+        )
+    ]
+    if not inizi and "s-search-result" not in corpo:
+        raise AdapterError("La pagina non contiene risultati di ricerca Amazon.")
+
+    items: list[Item] = []
+    visti: set[str] = set()
+    for indice, (inizio, asin) in enumerate(inizi):
+        if asin in visti:
+            continue
+        visti.add(asin)
+        fine = inizi[indice + 1][0] if indice + 1 < len(inizi) else len(corpo)
+        blocco = corpo[inizio:fine]
+
+        titolo_grezzo = re.search(r"<h2[^>]*>(.*?)</h2>", blocco, re.S)
+        titolo = _testo(titolo_grezzo.group(1)) if titolo_grezzo else asin
+        if not _keep(titolo, target):
+            continue
+
+        attuale, listino = _prezzi_blocco(blocco)
+        # Senza un prezzo in pagina il prodotto non e' acquistabile da li'.
+        items.append(_item_amazon(origine, asin, titolo, attuale is not None, attuale, listino))
+    return items
+
+
+def amazon_product_url(url: str) -> str:
+    """Riduce qualsiasi indirizzo di prodotto Amazon alla forma corta /dp/ASIN.
+
+    Dal browser si copia qualcosa come /Nome-Prodotto/dp/B0.../ref=sr_1_1?crid=...
+    con parametri di tracciamento che cambiano a ogni visita: la forma corta e'
+    stabile, piu' leggera, e punta alla stessa pagina.
+    """
+    trovato = re.search(r"/(?:dp|gp/product|gp/aw/d)/([A-Z0-9]{10})", url)
+    if not trovato:
+        return url
+    return f"{_origin(url)}/dp/{trovato.group(1)}"
+
+
+_NON_DISPONIBILE = ("non disponibile", "attualmente non", "currently unavailable", "esaurito")
+
+
+def parse_amazon_product(target: Target, response: httpx.Response) -> list[Item]:
+    corpo = response.text
+    _controlla_sfida(corpo)
+
+    asin_url = re.search(r"/(?:dp|gp/product)/([A-Z0-9]{10})", target.url)
+    asin_pagina = re.search(r'name="ASIN"\s+value="([A-Z0-9]{10})"', corpo)
+    asin = (asin_pagina or asin_url).group(1) if (asin_pagina or asin_url) else target.name
+
+    titolo_grezzo = re.search(r'id="productTitle"[^>]*>(.*?)</span>', corpo, re.S)
+    titolo = _testo(titolo_grezzo.group(1)) if titolo_grezzo else target.name
+
+    # Il prezzo che conta e' quello del riquadro d'acquisto: la pagina ne
+    # contiene decine (accessori, altri venditori, prodotti simili).
+    riquadro = ""
+    for identificativo in ("corePriceDisplay_desktop_feature_div", "corePrice_feature_div", "apex_desktop"):
+        trovato = re.search(rf'id="{identificativo}"(.*?)(?:id="[a-zA-Z]+_feature_div"|$)', corpo, re.S)
+        if trovato:
+            riquadro = trovato.group(1)[:20_000]
+            break
+    attuale, listino = _prezzi_blocco(riquadro or corpo[:400_000])
+
+    if attuale is None:
+        intero = re.search(r'class="a-price-whole">([\d.]+)', riquadro or corpo)
+        decimali = re.search(r'class="a-price-fraction">(\d+)', riquadro or corpo)
+        if intero:
+            attuale = prezzo_italiano(f"{intero.group(1)},{decimali.group(1) if decimali else '00'}")
+
+    disponibilita = re.search(r'id="availability"[^>]*>(.*?)</div>', corpo, re.S)
+    testo_disp = _testo(disponibilita.group(1)).split("{")[0].strip().lower() if disponibilita else ""
+    if any(segno in testo_disp for segno in _NON_DISPONIBILE):
+        disponibile = False
+    elif testo_disp:
+        disponibile = True
+    else:
+        disponibile = attuale is not None
+
+    item = _item_amazon(_origin(target.url), asin, titolo, disponibile, attuale, listino)
+    if testo_disp:
+        item.extra["disponibilita_testo"] = testo_disp[:80]
+    return [item]
+
+
+# --------------------------------------------------------------------------- #
 # Dispatch
 # --------------------------------------------------------------------------- #
 
 _URL_BUILDERS = {
     "shopify_product": shopify_product_url,
     "shopify_collection": shopify_collection_url,
+    "amazon_product": amazon_product_url,
 }
 
 _PARSERS = {
@@ -563,6 +760,8 @@ _PARSERS = {
     "json": parse_json,
     "html": parse_html,
     "links": parse_links,
+    "amazon_search": parse_amazon_search,
+    "amazon_product": parse_amazon_product,
 }
 
 

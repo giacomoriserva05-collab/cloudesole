@@ -282,6 +282,108 @@ PRESETS: list[Preset] = [
     ),
 
     # ----------------------------------------------------------------- #
+    # Amazon - www.amazon.it
+    # ----------------------------------------------------------------- #
+    Preset(
+        key="amazon-ricerca",
+        site="Amazon",
+        name="Amazon - una ricerca a scelta",
+        summary="Segue una ricerca Amazon: restock, prodotti nuovi e cali di prezzo.",
+        detail=(
+            "Legge una pagina di risultati di ricerca: 48 prodotti per richiesta, con\n"
+            "prezzo attuale, prezzo barrato e percentuale di sconto.\n\n"
+            "Ti avvisa quando un prodotto torna acquistabile, quando ne compare uno nuovo\n"
+            "fra i risultati e quando il prezzo scende di almeno il 5% rispetto all'ultima\n"
+            "volta che l'ha visto. L'avviso dice da quanto a quanto: '599,00 € (era 649,99 €)'.\n\n"
+            "E' il modo efficiente di seguire Amazon: una scheda prodotto pesa quasi 2 MB,\n"
+            "una ricerca ne pesa uno e contiene decine di prodotti."
+        ),
+        caveat=(
+            "Amazon mostra una verifica anti-bot se riceve troppe richieste: in quel caso\n"
+            "il monitor si ferma da solo per 30 minuti su quel sito invece di insistere.\n"
+            "L'intervallo di 5 minuti e' scelto per restare lontani da quella soglia.\n\n"
+            "Il calo di prezzo si misura dall'ultima lettura: il primo giro fotografa i\n"
+            "prezzi, gli sconti si vedono da li' in poi."
+        ),
+        needs_edit="Cambia 'playstation+5' nell'indirizzo con quello che vuoi seguire.",
+        tested="Ricerca 'playstation 5': 48 prodotti, 35 con prezzo, 11 gia' scontati.",
+        target={
+            "name": "Amazon - ricerca",
+            "type": "amazon_search",
+            "url": "https://www.amazon.it/s?k=playstation+5",
+            "interval": 300,
+            "notify": ["console", "desktop"],
+            "options": {"soglia_sconto": 5},
+        },
+    ),
+
+    Preset(
+        key="amazon-offerte",
+        site="Amazon",
+        name="Amazon - offerte del giorno",
+        summary="Avvisa quando compare una nuova offerta nella pagina Offerte.",
+        detail=(
+            "Sorveglia la pagina delle offerte di Amazon e ti avvisa quando ne compare\n"
+            "una nuova. Le offerte nuove vengono aperte per leggerne il nome vero e la\n"
+            "disponibilita', poche per giro."
+        ),
+        caveat=(
+            "Segnala le offerte NUOVE, non i ribassi di quelle gia' presenti: per quelli\n"
+            "usa una ricerca o un prodotto singolo.\n\n"
+            "La pagina mostra una sessantina di offerte senza scorrere: quelle che Amazon\n"
+            "carica solo scorrendo con il browser non sono visibili."
+        ),
+        tested="Pagina offerte: HTTP 200, 61 prodotti letti.",
+        target={
+            "name": "Amazon - offerte del giorno",
+            "type": "links",
+            "url": "https://www.amazon.it/deals",
+            "interval": 900,
+            "notify": ["console", "desktop"],
+            "options": {
+                "pattern": r"/dp/([A-Z0-9]{10})",
+                "base": "https://www.amazon.it/dp/",
+            },
+            "detail": {
+                "in_stock_when": ["Disponibilità immediata", "Disponibilità: solo"],
+                "out_of_stock_when": ["Attualmente non disponibile"],
+                "max_checks": 3,
+                "recheck_sold_out": False,
+            },
+        },
+    ),
+
+    Preset(
+        key="amazon-prodotto",
+        site="Amazon",
+        name="Amazon - un prodotto",
+        summary="Segue un solo prodotto: torna disponibile o scende di prezzo.",
+        detail=(
+            "Legge la scheda del prodotto: disponibilita' ('Disponibilita' immediata',\n"
+            "'solo 5', 'Attualmente non disponibile'), prezzo e prezzo di listino.\n\n"
+            "Ti avvisa quando torna acquistabile e quando il prezzo scende di almeno il 5%."
+        ),
+        caveat=(
+            "Una scheda Amazon pesa quasi 2 MB: se segui piu' prodotti della stessa\n"
+            "categoria, una ricerca e' molto piu' leggera e li copre tutti insieme."
+        ),
+        needs_edit=(
+            "Sostituisci l'indirizzo con quello del prodotto (va bene anche l'indirizzo\n"
+            "completo copiato dal browser). Nasce spento finche' non lo cambi."
+        ),
+        tested="Schede provate: disponibilita', prezzo e sconto letti come nella ricerca.",
+        target={
+            "name": "Amazon - prodotto",
+            "type": "amazon_product",
+            "url": "https://www.amazon.it/dp/CAMBIAQUESTO",
+            "interval": 300,
+            "enabled": False,
+            "notify": ["console", "desktop"],
+            "options": {"soglia_sconto": 5},
+        },
+    ),
+
+    # ----------------------------------------------------------------- #
     # GameLife - www.gamelife.it
     # ----------------------------------------------------------------- #
     Preset(

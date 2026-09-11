@@ -17,7 +17,15 @@ DEFAULT_USER_AGENT = (
     "contatto: imposta 'user_agent' in config.yaml)"
 )
 
-VALID_TYPES = {"shopify_product", "shopify_collection", "json", "html", "links"}
+VALID_TYPES = {
+    "shopify_product",
+    "shopify_collection",
+    "json",
+    "html",
+    "links",
+    "amazon_search",
+    "amazon_product",
+}
 
 
 class ConfigError(ValueError):

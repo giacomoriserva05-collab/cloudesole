@@ -20,6 +20,21 @@ from .state import State
 
 log = logging.getLogger(__name__)
 
+# Dopo una verifica anti-bot si aspetta a lungo prima di tornare.
+PAUSA_DOPO_SFIDA = 30 * 60
+
+
+def _soglia(target: Target) -> float | None:
+    """Soglia percentuale per gli avvisi di sconto, None se il target non li vuole."""
+    valore = target.options.get("soglia_sconto")
+    if valore is None:
+        # Sui target Amazon lo sconto e' il motivo per cui li si segue.
+        return 5.0 if target.type.startswith("amazon_") else None
+    try:
+        return max(0.0, float(valore))
+    except (TypeError, ValueError):
+        return None
+
 
 class Observer:
     """Aggancio opzionale per interfacce esterne (la GUI).
@@ -126,6 +141,16 @@ class Monitor:
 
         try:
             return adapters.parse(target, response)
+        except adapters.SfidaAntiBot as exc:
+            # Riprovare subito e' il modo piu' rapido per passare da una
+            # verifica occasionale a un blocco vero: si lascia stare l'host.
+            self.client.pausa(url, PAUSA_DOPO_SFIDA)
+            log.warning(
+                "[%s] %s Pausa di %d minuti su questo sito.",
+                target.name, exc, PAUSA_DOPO_SFIDA // 60,
+            )
+            self._tell("on_poll", target.name, False, detail="verifica anti-bot: in pausa")
+            return None
         except (adapters.AdapterError, ValueError) as exc:
             log.warning("[%s] risposta non interpretabile: %s", target.name, exc)
             self._tell("on_poll", target.name, False, detail="risposta non interpretabile")
@@ -235,7 +260,7 @@ class Monitor:
 
     async def _handle(self, target: Target, items: list[Item]) -> None:
         first_run = not self.state.is_seeded(target.name)
-        changes = self.state.diff(target.name, items)
+        changes = self.state.diff(target.name, items, soglia_sconto=_soglia(target))
         self._dirty = True
 
         if first_run:

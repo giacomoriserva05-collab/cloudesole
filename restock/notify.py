@@ -84,8 +84,29 @@ def _riga_taglie(change: Change) -> str:
     return "\n".join(righe)
 
 
+def _euro(valore) -> str:
+    return f"{float(valore):,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def testo_prezzo(change: Change) -> str:
+    """'619,79 € (era 649,99 €)' per uno sconto, il solo prezzo altrimenti.
+
+    Senza il prezzo di prima un avviso di sconto non dice niente: e' il
+    confronto che fa capire se vale la pena.
+    """
+    extra = change.item.extra
+    if change.kind == "sconto" and extra.get("prezzo_precedente") and change.item.price:
+        return f"{change.item.price} (era {_euro(extra['prezzo_precedente'])})"
+    if extra.get("listino_num") and change.item.price:
+        sconto = extra.get("sconto_pct")
+        quota = f", -{sconto}%" if sconto else ""
+        return f"{change.item.price} (listino {_euro(extra['listino_num'])}{quota})"
+    return change.item.price or ""
+
+
 def _line(change: Change) -> str:
-    price = f" | {change.item.price}" if change.item.price else ""
+    prezzo = testo_prezzo(change)
+    price = f" | {prezzo}" if prezzo else ""
     return f"{change.headline}{price}\n{change.item.url}{_riga_taglie(change)}"
 
 
@@ -104,7 +125,8 @@ class ConsoleNotifier(Notifier):
 
     async def send(self, change: Change) -> None:
         stamp = datetime.now().strftime("%H:%M:%S")
-        price = f"  {change.item.price}" if change.item.price else ""
+        prezzo = testo_prezzo(change)
+        price = f"  {prezzo}" if prezzo else ""
         if sys.stdout is None:
             # Avviati con pythonw (GUI) non esiste una console: il registro
             # dell'interfaccia grafica riceve comunque l'evento via logging.
@@ -140,7 +162,8 @@ class DesktopNotifier(Notifier):
             log.warning("winotify non installato: notifica desktop saltata.")
             return
 
-        price = f" - {change.item.price}" if change.item.price else ""
+        prezzo = testo_prezzo(change)
+        price = f" - {prezzo}" if prezzo else ""
         disponibili = taglie_disponibili(change)
         # Il toast ha poche righe: le taglie in fila, senza i link.
         misure = (
@@ -193,7 +216,7 @@ class TelegramNotifier(Notifier):
         if tastiera:
             # Con i pulsanti il corpo resta pulito: gli indirizzi lunghi
             # starebbero solo in mezzo.
-            prezzo = f"\n{change.item.price}" if change.item.price else ""
+            prezzo = f"\n{testo_prezzo(change)}" if change.item.price else ""
             disponibili = taglie_disponibili(change)
             totali = len(change.item.extra.get("taglie") or [])
             testo = (
@@ -202,7 +225,10 @@ class TelegramNotifier(Notifier):
                 f"\nPremi la taglia per aprire il prodotto gia' impostato su quella misura."
             )
         else:
-            testo = _line(change)
+            prezzo = testo_prezzo(change)
+            testo = change.headline + (f"\n{prezzo}" if prezzo else "")
+            # Anche senza taglie un pulsante e' meglio di un indirizzo da toccare.
+            tastiera = {"inline_keyboard": [[{"text": "Apri il prodotto", "url": change.item.url}]]}
 
         corpo = {
             "chat_id": chat_id,

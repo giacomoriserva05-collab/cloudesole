@@ -736,6 +736,157 @@ def _() -> None:
     assert testo.endswith("https://s.com/p"), testo
 
 
+# --------------------------------------------------------------------------- #
+# Amazon
+# --------------------------------------------------------------------------- #
+
+AMAZON_RICERCA = """
+<div data-asin="B0AAAAAAA1" data-index="1" data-component-type="s-search-result">
+  <h2><span>Console Uno</span></h2>
+  <span class="a-price" data-a-size="xl"><span class="a-offscreen">619,79&nbsp;€</span></span>
+  <span class="a-price a-text-price" data-a-strike="true"><span class="a-offscreen">649,99&nbsp;€</span></span>
+</div>
+<div data-asin="B0AAAAAAA2" data-index="2" data-component-type="s-search-result">
+  <h2><span>Controller Due</span></h2>
+  <span class="a-price" data-a-size="xl"><span class="a-offscreen">1.067,49 €</span></span>
+</div>
+<div data-asin="B0AAAAAAA3" data-index="3" data-component-type="s-search-result">
+  <h2><span>Gioco Esaurito</span></h2>
+</div>
+"""
+
+
+def _amazon(tipo: str, url: str, **opzioni) -> Target:
+    return make_target(type=tipo, url=url, options=opzioni)
+
+
+@test("amazon: prezzi italiani con punto delle migliaia e virgola decimale")
+def _() -> None:
+    assert adapters.prezzo_italiano("619,79 €") == 619.79
+    assert adapters.prezzo_italiano("1.067,49&nbsp;€") == 1067.49
+    assert adapters.prezzo_italiano("€ 12,00") == 12.0
+    assert adapters.prezzo_italiano("") is None
+    assert adapters.prezzo_italiano("gratis") is None
+
+
+@test("amazon: la ricerca da' prodotti, prezzi, listino e sconto")
+def _() -> None:
+    items = adapters.parse_amazon_search(
+        _amazon("amazon_search", "https://www.amazon.it/s?k=x"),
+        httpx.Response(200, text=AMAZON_RICERCA, request=httpx.Request("GET", "https://www.amazon.it/s?k=x")),
+    )
+    assert [i.key for i in items] == ["B0AAAAAAA1", "B0AAAAAAA2", "B0AAAAAAA3"]
+
+    uno, due, tre = items
+    assert uno.title == "Console Uno" and uno.available
+    assert uno.extra["prezzo_num"] == 619.79 and uno.extra["listino_num"] == 649.99
+    assert uno.extra["sconto_pct"] == 5, uno.extra
+    assert uno.url == "https://www.amazon.it/dp/B0AAAAAAA1"
+
+    assert due.extra["prezzo_num"] == 1067.49 and due.extra["listino_num"] is None
+
+    # Senza prezzo in pagina non si puo' comprare da li'.
+    assert tre.available is False and tre.extra["prezzo_num"] is None
+
+
+@test("amazon: la scheda legge disponibilita' e prezzo del riquadro d'acquisto")
+def _() -> None:
+    scheda = """
+      <input type="hidden" name="ASIN" value="B0AAAAAAA1">
+      <span id="productTitle">  Console Uno  </span>
+      <div id="corePriceDisplay_desktop_feature_div">
+        <span class="a-price aok-align-center priceToPay" data-a-size="xl"><span class="a-offscreen">619,79 €</span></span>
+        <span class="a-price a-text-price apex-basisprice-value" data-a-strike="true"><span class="a-offscreen">649,99 €</span></span>
+      </div>
+      <div id="availability"><span>Disponibilità immediata</span></div>
+    """
+    t = _amazon("amazon_product", "https://www.amazon.it/dp/B0AAAAAAA1")
+    [p] = adapters.parse_amazon_product(t, httpx.Response(200, text=scheda))
+    assert p.key == "B0AAAAAAA1" and p.title == "Console Uno"
+    assert p.available is True
+    assert p.extra["prezzo_num"] == 619.79 and p.extra["sconto_pct"] == 5, p.extra
+
+    esaurita = scheda.replace("Disponibilità immediata", "Attualmente non disponibile.")
+    [p] = adapters.parse_amazon_product(t, httpx.Response(200, text=esaurita))
+    assert p.available is False
+
+
+@test("amazon: la verifica anti-bot viene riconosciuta e non interpretata come dati")
+def _() -> None:
+    sfida = "<html><form action='/errors/validateCaptcha'>Inserisci i caratteri che vedi</form></html>"
+    for tipo, url in (("amazon_search", "https://www.amazon.it/s?k=x"), ("amazon_product", "https://www.amazon.it/dp/B0AAAAAAA1")):
+        try:
+            adapters.parse(_amazon(tipo, url), httpx.Response(200, text=sfida, request=httpx.Request("GET", url)))
+        except adapters.SfidaAntiBot:
+            continue
+        raise AssertionError(f"{tipo}: la verifica anti-bot doveva essere segnalata")
+
+
+@test("sconto: un calo oltre la soglia produce un avviso con il prezzo di prima")
+def _() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        state = State(Path(tmp) / "state.json")
+
+        def prodotto(prezzo: float) -> Item:
+            return Item(key="A", title="Console", available=True, url="u",
+                        price=f"{prezzo:.2f}", extra={"prezzo_num": prezzo})
+
+        state.diff("T", [prodotto(649.99)], soglia_sconto=5)            # fotografia
+        assert state.diff("T", [prodotto(640.00)], soglia_sconto=5) == []  # -1.5%: sotto soglia
+
+        cambi = state.diff("T", [prodotto(599.00)], soglia_sconto=5)
+        assert len(cambi) == 1 and cambi[0].kind == "sconto", cambi
+        assert cambi[0].item.extra["prezzo_precedente"] == 640.00
+        assert "[SCONTO (-6.4%)]" in cambi[0].headline, cambi[0].headline
+
+        # Lo stesso prezzo al giro dopo non e' di nuovo uno sconto.
+        assert state.diff("T", [prodotto(599.00)], soglia_sconto=5) == []
+        # Un rialzo non e' uno sconto.
+        assert state.diff("T", [prodotto(629.00)], soglia_sconto=5) == []
+
+
+@test("sconto: senza soglia il prezzo si ricorda ma non si notifica")
+def _() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        state = State(Path(tmp) / "state.json")
+        voce = lambda p: Item(key="A", title="x", available=True, url="u", extra={"prezzo_num": p})
+        state.diff("T", [voce(100.0)])
+        assert state.diff("T", [voce(50.0)]) == []
+        assert state.known("T", "A")["prezzo_num"] == 50.0
+
+
+@test("sconto: il prezzo resta in memoria anche mentre il prodotto e' esaurito")
+def _() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        state = State(Path(tmp) / "state.json")
+        state.diff("T", [Item(key="A", title="x", available=True, url="u", extra={"prezzo_num": 100.0})], 5)
+        # Esaurito: su Amazon il prezzo sparisce dalla pagina.
+        state.diff("T", [Item(key="A", title="x", available=False, url="u", extra={"prezzo_num": None})], 5)
+        assert state.known("T", "A")["prezzo_num"] == 100.0, "l'ultimo prezzo noto andava conservato"
+
+
+@test("notifiche: lo sconto dice da quanto a quanto")
+def _() -> None:
+    from restock.notify import testo_prezzo
+
+    item = Item(key="A", title="Console", available=True, url="u", price="599,00 €",
+                extra={"prezzo_num": 599.0, "prezzo_precedente": 649.99, "calo_pct": 7.8})
+    assert testo_prezzo(Change("Amazon", item, "sconto")) == "599,00 € (era 649,99 €)"
+
+    listino = Item(key="A", title="x", available=True, url="u", price="619,79 €",
+                   extra={"listino_num": 649.99, "sconto_pct": 5})
+    assert testo_prezzo(Change("Amazon", listino, "new")) == "619,79 € (listino 649,99 €, -5%)"
+
+
+@test("amazon: la soglia di sconto predefinita vale solo per i target Amazon")
+def _() -> None:
+    from restock.monitor import _soglia
+
+    assert _soglia(make_target(type="amazon_search", url="https://www.amazon.it/s?k=x")) == 5.0
+    assert _soglia(make_target(type="html", url="https://s.com/p", options={"out_of_stock_when": ["x"]})) is None
+    assert _soglia(make_target(type="html", url="https://s.com/p", options={"soglia_sconto": 12})) == 12.0
+
+
 @test("config: il blocco detail viene validato")
 def _() -> None:
     base = (

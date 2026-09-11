@@ -342,6 +342,56 @@ struct MonitorTarget: Codable, Identifiable, Equatable {
     /// i target salvati prima che esistesse si leggono lo stesso.
     var preset: String?
 
+    // --- tipo "elenco", approfondimento: si aprono le schede dei prodotti ---
+    //
+    // Opzionali per la stessa ragione di `preset`: un campo nuovo non
+    // opzionale renderebbe illeggibili i target salvati da una versione
+    // precedente, e il decodificatore li butterebbe via tutti insieme.
+    // Da fuori si usano le proprietà qui sotto, che hanno un valore sempre.
+    var approfondisci: Bool?
+    var schedaDisponibile: String?
+    var schedaEsaurito: String?
+    var schedaRiconosciuta: String?
+    var schedePerGiro: Int?
+    var schedaRegex: Bool?
+
+    /// Aprire le schede dei prodotti per sapere se si possono comprare. È
+    /// ciò che permette di accorgersi dei restock su un elenco di link.
+    var approfondisce: Bool {
+        get { approfondisci ?? false }
+        set { approfondisci = newValue }
+    }
+    /// Frasi che dicono "si può comprare", una per riga.
+    var marcatoriSchedaDisponibile: String {
+        get { schedaDisponibile ?? "" }
+        set { schedaDisponibile = newValue }
+    }
+    /// Frasi che dicono "esaurito". Hanno la precedenza.
+    var marcatoriSchedaEsaurito: String {
+        get { schedaEsaurito ?? "" }
+        set { schedaEsaurito = newValue }
+    }
+    /// Se non è vuoto, una scheda che non contiene nessuna di queste frasi
+    /// non viene giudicata: è una verifica anti-bot o una pagina d'errore,
+    /// non il prodotto. Senza, una pagina così varrebbe "esaurito", e alla
+    /// successiva pagina buona scatterebbe un falso restock.
+    var marcatoriSchedaRiconosciuta: String {
+        get { schedaRiconosciuta ?? "" }
+        set { schedaRiconosciuta = newValue }
+    }
+    var schedeOgniGiro: Int {
+        get { schedePerGiro ?? 5 }
+        set { schedePerGiro = newValue }
+    }
+    var marcatoriSchedaRegex: Bool {
+        get { schedaRegex ?? false }
+        set { schedaRegex = newValue }
+    }
+
+    var elencoSchedaDisponibile: [String] { Self.righe(marcatoriSchedaDisponibile) }
+    var elencoSchedaEsaurito: [String] { Self.righe(marcatoriSchedaEsaurito) }
+    var elencoSchedaRiconosciuta: [String] { Self.righe(marcatoriSchedaRiconosciuta) }
+
     var elencoSoloSe: [String] { Self.parole(soloSe) }
     var elencoTranneSe: [String] { Self.parole(tranneSe) }
 
@@ -397,7 +447,11 @@ enum MonitorPredefiniti {
                             url: "https://eu.supreme.com/collections/all",
                             schema: "/products/([A-Za-z0-9._-]{2,90})",
                             base: "https://eu.supreme.com/products/",
-                            ogni: 30)),
+                            ogni: 30,
+                            // Provato su 24 schede: 20 disponibili e 4 esaurite,
+                            // tutte riconosciute. Con 216 prodotti, dieci a giro
+                            // coprono il catalogo in una decina di minuti.
+                            schede: 10)),
 
         Voce(id: "travis-apertura",
              sito: "Travis Scott",
@@ -424,7 +478,8 @@ enum MonitorPredefiniti {
                             url: "https://shop.travisscott.com/collections/all",
                             schema: "/products/([a-z0-9][a-z0-9-]{2,60})",
                             base: "https://shop.travisscott.com/products/",
-                            ogni: 60)),
+                            ogni: 60,
+                            schede: 5)),
 
         Voce(id: "nike-novita",
              sito: "Nike",
@@ -448,7 +503,10 @@ enum MonitorPredefiniti {
                             url: "https://www.nike.com/it/launch/in-stock",
                             schema: "/it/launch/t/([a-z0-9-]{4,90})",
                             base: "https://www.nike.com/it/launch/t/",
-                            ogni: 90)),
+                            ogni: 90,
+                            // Disponibilità per taglia nella scheda: provata su
+                            // cinque lanci reali.
+                            schede: 4)),
 
         Voce(id: "snkrs-lanci",
              sito: "SNKRS",
@@ -463,16 +521,36 @@ enum MonitorPredefiniti {
                             ogni: 300))
     ]
 
+    /// `schede` a zero vuol dire che le schede non si aprono: su Nike.com e
+    /// sui lanci in calendario la pagina non dice niente di utile — per i
+    /// secondi dice "disponibile" per taglie che non sono ancora in vendita.
     private static func elenco(id: String, nome: String, url: String,
-                               schema: String, base: String, ogni: Double) -> MonitorTarget {
+                               schema: String, base: String, ogni: Double,
+                               schede: Int = 0) -> MonitorTarget {
         var t = MonitorTarget(nome: nome, url: url)
         t.tipo = .elenco
         t.schema = schema
         t.base = base
         t.intervallo = ogni
         t.preset = id
+        if schede > 0 { conApprofondimento(&t, schede: schede) }
         return t
     }
+
+    /// Il controllo delle schede come lo fa il monitor sul computer, con il
+    /// marcatore di Shopify e di Nike.
+    static func conApprofondimento(_ t: inout MonitorTarget, schede: Int) {
+        t.approfondisce = true
+        t.marcatoriSchedaDisponibile = MarcatoriScheda.disponibile
+        t.marcatoriSchedaRiconosciuta = MarcatoriScheda.riconosciuta
+        t.marcatoriSchedaRegex = true
+        t.schedeOgniGiro = schede
+    }
+
+    /// I predefiniti che aprono le schede, e quante per giro.
+    static let schedePerPredefinito: [String: Int] = [
+        "supreme-eu": 10, "travis-nuovi": 5, "snkrs-disponibili": 4
+    ]
 
     private static func pagina(id: String, nome: String, url: String,
                                esaurito: String, disponibile: String,
@@ -501,6 +579,16 @@ enum MonitorPredefiniti {
     }
 }
 
+/// Il campo "available" che Shopify e Nike incorporano nella scheda. La barra
+/// rovescia è facoltativa: su Nike quel JSON sta dentro una stringa, e le
+/// virgolette arrivano sfuggite.
+enum MarcatoriScheda {
+    static let disponibile = "\\\\?\"available\\\\?\"\\s*:\\s*true"
+    /// Presente sia a prodotto disponibile sia esaurito: se manca, la pagina
+    /// non è la scheda del prodotto.
+    static let riconosciuta = "\\\\?\"available\\\\?\"\\s*:"
+}
+
 /// Un articolo visto durante un controllo.
 struct MonitorItem: Equatable {
     var chiave: String       // id variante: stabile fra un giro e l'altro
@@ -508,6 +596,9 @@ struct MonitorItem: Equatable {
     var disponibile: Bool
     var url: String
     var prezzo: String?
+    /// Falso quando "disponibile" vuol dire solo "presente in elenco": un
+    /// link trovato in una pagina non dice se il prodotto si può comprare.
+    var verificato: Bool = true
 }
 
 /// Cos'è cambiato fra due controlli. Le stesse due categorie del desktop.
